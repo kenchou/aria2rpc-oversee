@@ -9,10 +9,11 @@ class Aria2RpcClient:
         self.url = url
         self.token = token
         self._uniq_id = 0
+        self.last_response = None
 
     def __getattr__(self, item):
         def _function(*args, **kwargs):
-            print('""">>> You tried to call a method named: %s, args:' % item, *args, kwargs, '"""')
+            # print('""">>> You tried to call a method named: %s, args:' % item, *args, kwargs, '"""')
             return self.request(item, args, **kwargs)
         return _function
 
@@ -33,7 +34,29 @@ class Aria2RpcClient:
             'method': method,
             'params': data,
         }
-        # print(params)
-        # print('===>')
-        # print(json.dumps(params))
-        return requests.post(self.url, json.dumps(params))
+
+        self.last_response = requests.post(self.url, json.dumps(params))
+        return Aria2RpcResponse(json.loads(self.last_response.text))
+
+
+class Aria2RpcResponse:
+    def __init__(self, response_data):
+        self.response = response_data
+
+    def has_error(self):
+        return self.error_code
+
+    @property
+    def error_code(self):
+        return self.response.get('error', 0)
+
+    @property
+    def error_message(self):
+        return self.response.get('message', '')
+
+    @property
+    def result(self):
+        return self.response.get('result')
+
+    def __str__(self):
+        return json.dumps(self.response)
