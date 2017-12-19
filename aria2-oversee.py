@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
         response = aria2.tellActive()
 
-        if not response.has_error():
+        if not response.error:
             print('"""{:16}\t{:12}\t{:12}\t{:9}(%)\t{:9}"""'.format('GID', 'Completed', 'Total', 'Progress', 'Speed'))
 
             for task in response.result:
@@ -56,13 +56,13 @@ if __name__ == "__main__":
                     while retry:
                         r = aria2.pause(gid)
                         logger.info(r)
-                        retry = r.has_error()
+                        retry = r.error
                         if retry:
                             sleep(1)
                     retry = True
                     while retry:
                         r = aria2.unpause(gid)
-                        retry = r.has_error()
+                        retry = r.error
                         logger.info(r)
                         if retry:
                             sleep(1)

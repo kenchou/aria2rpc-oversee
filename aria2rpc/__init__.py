@@ -43,16 +43,9 @@ class Aria2RpcResponse:
     def __init__(self, response_data):
         self.response = response_data
 
-    def has_error(self):
-        return self.error_code
-
     @property
-    def error_code(self):
-        return self.response.get('error', 0)
-
-    @property
-    def error_message(self):
-        return self.response.get('message', '')
+    def error(self):
+        return self.response.get('error')
 
     @property
     def result(self):
