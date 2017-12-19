@@ -18,6 +18,7 @@ if __name__ == "__main__":
 
     statistics = {}
     while True:
+        queue = []
         print('"""--------"""')
 
         r = aria2.tellActive()
@@ -40,12 +41,12 @@ if __name__ == "__main__":
                 # TODO: compute avg download speed
                 r = aria2.pause(gid)
                 print(r.text)
-                # change position
-                r = aria2.changePosition(gid, 1000, 'POS_SET')
-                print(r.text)
-                r = aria2.unpause(gid)
-                print(r.text)
+                queue.append(gid)
             s['completed-length'] = completed_length
+        sleep(5)
+        for gid in queue:
+            r = aria2.unpause(gid)
+            print(r.text)
 
         r = aria2.tellWaiting(0, 20)
         # print(r.text)
@@ -59,4 +60,11 @@ if __name__ == "__main__":
                 gid,
                 completed_length, total_length, completed_length/total_length*100 if total_length else 0,
                 int(download_speed)))
-        sleep(60)
+
+        position = 1000
+        for gid in queue:
+            position += 1
+            r = aria2.changePosition(gid, position, 'POS_SET')
+            print(r.text)
+
+        sleep(300)
