@@ -85,7 +85,7 @@ def main(jsonrpc, token, verbose):
             for gid in queue:
                 position += 1
                 r = aria2.changePosition(gid, position, 'POS_SET')
-                logger.info(r)
+                logger.info('%s(%s, %s, %s): %s', 'changePosition', position, 'POS_SET', r)
 
             print('""" waiting """')
             response = aria2.tellWaiting(0, 20)
