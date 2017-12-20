@@ -11,10 +11,10 @@ class Aria2RpcClient:
         self._uniq_id = 0
         self.last_response = None
 
-    def __getattr__(self, item):
-        def _function(*args, **kwargs):
-            # print('""">>> You tried to call a method named: %s, args:' % item, *args, kwargs, '"""')
-            return self.request(item, args, **kwargs)
+    def __getattr__(self, method):
+        def _function(*args):
+            # print('""">>> You tried to call a method named: %s, args:' % method, *args, kwargs, '"""')
+            return self.request(method, args)
         return _function
 
     def request(self, method, data=None):
