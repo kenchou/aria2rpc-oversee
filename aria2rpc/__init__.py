@@ -12,10 +12,11 @@ class Aria2RpcClient:
         self.last_response = None
 
     def __getattr__(self, method):
-        def _function(*args):
+        def _request(*args):
+            _request.__name__ = method
             # print('""">>> You tried to call a method named: %s, args:' % method, *args, kwargs, '"""')
             return self.request(method, args)
-        return _function
+        return _request
 
     def request(self, method, data=None):
         if data is None:
