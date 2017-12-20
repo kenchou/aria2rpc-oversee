@@ -35,18 +35,17 @@ def try_call(func, *args, **kwargs):
 
 
 @click.command()
-@click.option('--jsonrpc', help='Aria2 JSONRPC server.')
+@click.option('--jsonrpc', help='Aria2 JSONRPC server. default: {}'.format(DEFAULT_ARIA2_JSONRPC))
 @click.option('--token', help='RPC SECRET string')
 @click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
 def main(jsonrpc, token, verbose):
-    # click.secho('verbose: {}, log level: {}'.format(verbose, log_levels.get(verbose, logging.WARNING)), fg='green')
-
     logging.basicConfig(level=log_levels.get(verbose, logging.INFO))
     logger = logging.getLogger(__name__)
 
     config = get_config(ARIA2_CONFIG, {'json-rpc': DEFAULT_ARIA2_JSONRPC})
+
     if not jsonrpc:
-        jsonrpc = config.get('json-rpc')
+        jsonrpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
     if not token:
         token = config.get('token')
 
@@ -60,7 +59,7 @@ def main(jsonrpc, token, verbose):
         response = aria2.tellActive()
 
         if not response.error:
-            print('"""{:16}\t{:12}\t{:12}\t{:9}(%)\t{:9}"""'.format('GID', 'Completed', 'Total', 'Progress', 'Speed'))
+            print('"{:16}\t{:12}\t{:12}\t{:9}(%)\t{:9}"'.format('GID', 'Completed', 'Total', 'Progress', 'Speed'))
 
             for task in response.result:
                 gid = task['gid']
@@ -68,7 +67,7 @@ def main(jsonrpc, token, verbose):
                 download_speed = task['downloadSpeed']
                 total_length = int(task['totalLength'])
 
-                print('"""{}\t{:12}\t{:12}\t{:9.2f}%\t{:9d}"""'.format(
+                print('"{}\t{:12}\t{:12}\t{:9.2f}%\t{:9d}"'.format(
                     gid,
                     completed_length, total_length, completed_length/total_length*100 if total_length else 0,
                     int(download_speed)))
@@ -96,7 +95,7 @@ def main(jsonrpc, token, verbose):
                 completed_length = int(task['completedLength'])
                 download_speed = task['downloadSpeed']
                 total_length = int(task['totalLength'])
-                print('"""{}\t{:12}\t{:12}\t{:9.2f}%\t{:9d}"""'.format(
+                print('"{}\t{:12}\t{:12}\t{:9.2f}%\t{:9d}"'.format(
                     gid,
                     completed_length, total_length, completed_length/total_length*100 if total_length else 0,
                     int(download_speed)))

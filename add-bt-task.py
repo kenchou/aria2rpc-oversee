@@ -31,7 +31,7 @@ def main(jsonrpc, token, download_dir, pause, torrent_file):
     config = get_config(ARIA2_CONFIG, {'json-rpc': DEFAULT_ARIA2_JSONRPC})
 
     if not jsonrpc:
-        jsonrpc = config.get('json-rpc')
+        jsonrpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
     if not token:
         token = config.get('token')
 
