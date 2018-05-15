@@ -59,7 +59,7 @@ def main(jsonrpc, token, verbose):
         response = aria2.tellActive()
 
         if not response.error:
-            print('"{:16}\t{:12}\t{:12}\t{:9}(%)\t{:9}"'.format('GID', 'Completed', 'Total', 'Progress', 'Speed'))
+            print('"{:16}\t{:12}\t{:12}\t{:9}(%)\t{}"'.format('GID', 'Completed', 'Total', 'Progress', 'Speed'))
 
             for task in response.result:
                 gid = task['gid']
