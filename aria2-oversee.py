@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 
-import argparse
 import click
 import click_log
 import logging
 
-from aria2rpc import Aria2RpcClient
+from aria2rpc import Aria2RpcClient, DEFAULT_ARIA2_JSONRPC
 from aria2rpc.config import get_config
 from time import sleep
 
 
 ARIA2_CONFIG = '.config/aria2rpc.json'
-DEFAULT_ARIA2_JSONRPC = 'http://localhost:6800/jsonrpc'
 
 log_levels = {
     0: logging.WARNING,
@@ -35,21 +33,21 @@ def try_call(func, *args, **kwargs):
 
 
 @click.command()
-@click.option('--jsonrpc', help='Aria2 JSONRPC server. default: {}'.format(DEFAULT_ARIA2_JSONRPC))
+@click.option('--json-rpc', help='Aria2 JSON-RPC server. default: {}'.format(DEFAULT_ARIA2_JSONRPC))
 @click.option('--token', help='RPC SECRET string')
 @click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
-def main(jsonrpc, token, verbose):
+def run(json_rpc, token, verbose):
     logging.basicConfig(level=log_levels.get(verbose, logging.INFO))
     logger = logging.getLogger(__name__)
 
     config = get_config(ARIA2_CONFIG, {'json-rpc': DEFAULT_ARIA2_JSONRPC})
 
-    if not jsonrpc:
-        jsonrpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
+    if not json_rpc:
+        json_rpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
     if not token:
         token = config.get('token')
 
-    aria2 = Aria2RpcClient(url=jsonrpc, token=token)
+    aria2 = Aria2RpcClient(url=json_rpc, token=token)
 
     statistics = {}
     while True:
@@ -104,4 +102,4 @@ def main(jsonrpc, token, verbose):
 
 
 if __name__ == "__main__":
-    main()
+    run()

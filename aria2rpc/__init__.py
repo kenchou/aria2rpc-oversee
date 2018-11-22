@@ -4,9 +4,12 @@ import requests
 from baseconv import base36
 
 
+DEFAULT_ARIA2_JSONRPC = 'http://localhost:6800/jsonrpc'
+
+
 class Aria2RpcClient:
-    def __init__(self, url='http://localhost:6800/jsonrpc', token=None):
-        self.url = url
+    def __init__(self, url=None, token=None):
+        self.url = url or DEFAULT_ARIA2_JSONRPC
         self.token = token
         self._uniq_id = 0
         self.last_response = None
