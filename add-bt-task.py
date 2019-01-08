@@ -21,21 +21,21 @@ click_log.basic_config(logger)
 
 
 @click.command()
-@click.option('--jsonrpc', help='Aria2 JSONRPC server.')
+@click.option('--json-rpc', help='Aria2 JSONRPC server.')
 @click.option('--token', help='RPC SECRET string')
 @click.option('--dir', 'download_dir', help="The directory to store the downloaded file.")
 @click.option('--pause', is_flag=True, help='Pause download after added.')
 @click.argument('torrent-file', type=click.File('rb'), nargs=-1, required=True)
-def main(jsonrpc, token, download_dir, pause, torrent_file):
+def main(json_rpc, token, download_dir, pause, torrent_file):
     """Aria2 RPC Client"""
     config = get_config(ARIA2_CONFIG, {'json-rpc': DEFAULT_ARIA2_JSONRPC})
 
-    if not jsonrpc:
-        jsonrpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
+    if not json_rpc:
+        json_rpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
     if not token:
         token = config.get('token')
 
-    aria2 = Aria2RpcClient(jsonrpc, token=token)
+    aria2 = Aria2RpcClient(json_rpc, token=token)
 
     option = {}
     if dir:
