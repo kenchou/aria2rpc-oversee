@@ -13,4 +13,4 @@ click_log == 0.2.1
 python_baseconv == 1.2.0
 
 # aria2rpc/__init__.py: 2
-requests == 2.18.4
+requests == 2.20.0
