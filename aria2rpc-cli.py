@@ -63,7 +63,7 @@ def main(json_rpc, token, download_dir, pause, url_or_torrent_path):
             print(response)
             pass
         else:
-            with open(uri) as f:
+            with open(uri, 'rb') as f:
                 if is_torrent(f):
                     torrent = base64.b64encode(f.read()).decode('utf-8')
                     response = aria2.addTorrent(torrent, [], options)
