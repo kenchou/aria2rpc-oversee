@@ -84,7 +84,7 @@ def main(json_rpc, token, download_dir, exclude_file, pause, url_or_torrent_path
                     torrent = TorrentFileParser(f, use_ordered_dict=True).parse()
                     if 'files' in torrent['info']:  # filter if there is multi-files torrent
                         selected = []
-                        for idx, file_info in enumerate(torrent['info']['files']):
+                        for idx, file_info in enumerate(torrent['info']['files'], 1):
                             # print(idx, file_info)
                             include_path = len(file_info['path']) > 1
                             file_path = os.path.join(*file_info['path'])
@@ -100,7 +100,7 @@ def main(json_rpc, token, download_dir, exclude_file, pause, url_or_torrent_path
                             else:
                                 click.secho(f'{uri}, selected {idx}, file: "{file_path}", len: {file_length}',
                                             fg='green')
-                                selected.append(idx)
+                                selected.append(str(idx))
                     if selected:
                         options['select-file'] = ','.join(selected)
                     f.seek(0)   # rewind the file
