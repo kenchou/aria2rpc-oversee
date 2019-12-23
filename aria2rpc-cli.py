@@ -4,43 +4,67 @@ import base64
 import click
 import click_log
 import logging
+import os.path
 import re
 
 from aria2rpc import Aria2RpcClient
 from aria2rpc.config import get_config
+from fnmatch import fnmatch
+from torrent_parser import TorrentFileParser, InvalidTorrentDataException
 
 
 ARIA2_CONFIG = '.config/aria2rpc.json'
 DEFAULT_ARIA2_JSONRPC = 'http://localhost:6800/jsonrpc'
+PATTERN_SUPPORTED_URI = re.compile('(http(s)?|ftp(s)|sftp)://|magnet:')
 
 
+# init logger
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 click_log.basic_config(logger)
 
 
-pattern = re.compile('(http(s)?|ftp|sftp|ftps)://|magnet:')
+def is_supported_uri(uri):
+    return PATTERN_SUPPORTED_URI.match(uri)
 
 
-def is_url(uri):
-    return pattern.match(uri)
+def is_torrent_file(filename):
+    return '.torrent' == os.path.splitext(filename)[1]
 
 
-def is_torrent(f):
-    return True
+def is_aria2_file(filename):
+    return '.aria2' == os.path.splitext(filename)[1]
 
 
-def is_aria2_session(f):
-    pass
+def torrent_filter_file(torrent_info, excludes):
+    if 'files' not in torrent_info:  # filter if there is multi-files torrent
+        return False
+    selected = []
+    for idx, file_info in enumerate(torrent_info['files'], 1):
+        include_path = len(file_info['path']) > 1
+        file_path = os.path.join(*file_info['path'])
+        file_length = file_info["length"]
+        _lower_file_path = file_path.lower()  # for fnmatch case-insensitive
+        for p in excludes:
+            exclude_pattern = os.path.join('*', p) if include_path else p
+            if fnmatch(_lower_file_path, exclude_pattern.lower()):
+                logging.debug(f'{torrent_info["name"]}, match: {exclude_pattern}, '
+                              f'skip file: "{file_path}", len: {file_length}')
+                break
+        else:
+            logging.info(f'{torrent_info["name"]}, selected {idx}, file: "{file_path}", len: {file_length}')
+            selected.append(str(idx))
+    return selected
 
 
 @click.command()
-@click.option('--json-rpc', help='Aria2 JSONRPC server.')
+@click.option('--json-rpc', help='Aria2 JSON-RPC server.')
 @click.option('--token', help='RPC SECRET string')
 @click.option('-d', '--download-dir', help="The directory to store the downloaded file.")
+@click.option('-x', '--exclude-file', default='clean.lst', type=click.File('r'), help="path to file of exclude list.")
 @click.option('--pause', is_flag=True, help='Pause download after added.')
 @click.argument('url-or-torrent-path', nargs=-1, required=True)
-def main(json_rpc, token, download_dir, pause, url_or_torrent_path):
+def main(json_rpc, token, download_dir, exclude_file, pause, url_or_torrent_path):
     """Aria2 RPC Client"""
     config = get_config(ARIA2_CONFIG, {'json-rpc': DEFAULT_ARIA2_JSONRPC})
 
@@ -48,6 +72,15 @@ def main(json_rpc, token, download_dir, pause, url_or_torrent_path):
         json_rpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
     if not token:
         token = config.get('token')
+
+    # exclude list
+    exclude_patterns = []
+    if exclude_file:
+        for line in exclude_file:
+            line = line.strip()
+            if not line or '#' == line[1]:    # skip empty lines or comment
+                continue
+            exclude_patterns.append(line)
 
     aria2 = Aria2RpcClient(json_rpc, token=token)
 
@@ -58,20 +91,34 @@ def main(json_rpc, token, download_dir, pause, url_or_torrent_path):
         options['pause'] = pause
 
     for uri in url_or_torrent_path:
-        if is_url(uri):
+        click.echo(f'## process {uri}')
+        if is_supported_uri(uri):
+            # aria2.addUri([secret, ]uris[, options[, position]])
+            # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
             response = aria2.addUri([uri], options)
-            print(response)
+            click.echo(response)
             pass
+        elif is_torrent_file(uri):
+            try:
+                with open(uri, 'rb') as f:
+                    # parse torrent file
+                    torrent = TorrentFileParser(f).parse()
+                    selected = torrent_filter_file(torrent['info'], exclude_patterns)
+                    if selected:
+                        options['select-file'] = ','.join(selected)
+                    f.seek(0)   # rewind the file
+                    # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
+                    # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
+                    response = aria2.addTorrent(base64.b64encode(f.read()).decode('utf-8'), [], options)
+                    click.echo(response)
+            except InvalidTorrentDataException as e:
+                click.secho(f'skip torrent file: "{uri}", reason: {e}', err=True, fg='yellow')
+                continue
+        elif is_aria2_file(uri):
+            # TODO: parse .aria2 file and add magnet URI
+            click.secho(f'Not currently supported file "{uri}"', err=True, fg='red')
         else:
-            with open(uri, 'rb') as f:
-                if is_torrent(f):
-                    torrent = base64.b64encode(f.read()).decode('utf-8')
-                    response = aria2.addTorrent(torrent, [], options)
-                    print(response)
-                elif is_aria2_session(f):
-                    pass
-                else:
-                    print('unknown file')
+            click.secho(f'Unknown file "{uri}"', err=True, fg='red')
 
 
 if __name__ == '__main__':
