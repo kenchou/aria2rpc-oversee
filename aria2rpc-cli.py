@@ -36,8 +36,29 @@ def is_aria2_file(filename):
     return '.aria2' == os.path.splitext(filename)[1]
 
 
+def torrent_filter_file(torrent_info, excludes):
+    if 'files' not in torrent_info:  # filter if there is multi-files torrent
+        return False
+    selected = []
+    for idx, file_info in enumerate(torrent_info['files'], 1):
+        include_path = len(file_info['path']) > 1
+        file_path = os.path.join(*file_info['path'])
+        file_length = file_info["length"]
+        _lower_file_path = file_path.lower()  # for fnmatch case-insensitive
+        for p in excludes:
+            exclude_pattern = os.path.join('*', p) if include_path else p
+            if fnmatch(_lower_file_path, exclude_pattern.lower()):
+                logging.debug(f'{torrent_info["name"]}, match: {exclude_pattern}, '
+                              f'skip file: "{file_path}", len: {file_length}')
+                break
+        else:
+            logging.info(f'{torrent_info["name"]}, selected {idx}, file: "{file_path}", len: {file_length}')
+            selected.append(str(idx))
+    return selected
+
+
 @click.command()
-@click.option('--json-rpc', help='Aria2 JSONRPC server.')
+@click.option('--json-rpc', help='Aria2 JSON-RPC server.')
 @click.option('--token', help='RPC SECRET string')
 @click.option('-d', '--download-dir', help="The directory to store the downloaded file.")
 @click.option('-x', '--exclude-file', default='clean.lst', type=click.File('r'), help="path to file of exclude list.")
@@ -81,26 +102,8 @@ def main(json_rpc, token, download_dir, exclude_file, pause, url_or_torrent_path
             try:
                 with open(uri, 'rb') as f:
                     # parse torrent file
-                    torrent = TorrentFileParser(f, use_ordered_dict=True).parse()
-                    if 'files' in torrent['info']:  # filter if there is multi-files torrent
-                        selected = []
-                        for idx, file_info in enumerate(torrent['info']['files'], 1):
-                            # print(idx, file_info)
-                            include_path = len(file_info['path']) > 1
-                            file_path = os.path.join(*file_info['path'])
-                            file_length = file_info["length"]
-                            _lower_file_path = file_path.lower()    # for fnmatch case-insensitive
-                            for p in exclude_patterns:
-                                exclude_pattern = os.path.join('*', p) if include_path else p
-                                if fnmatch(_lower_file_path, exclude_pattern.lower()):
-                                    click.secho(f'{uri}, match: {exclude_pattern}, '
-                                                f'skip file: "{file_path}", len: {file_length}, ',
-                                                err=True, fg='yellow')
-                                    break
-                            else:
-                                click.secho(f'{uri}, selected {idx}, file: "{file_path}", len: {file_length}',
-                                            fg='green')
-                                selected.append(str(idx))
+                    torrent = TorrentFileParser(f).parse()
+                    selected = torrent_filter_file(torrent['info'], exclude_patterns)
                     if selected:
                         options['select-file'] = ','.join(selected)
                     f.seek(0)   # rewind the file
