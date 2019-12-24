@@ -7,21 +7,16 @@ import logging
 import os.path
 import re
 
-from aria2rpc import Aria2RpcClient
-from aria2rpc.config import get_config
+from pathlib import Path
 from fnmatch import fnmatch
 from torrent_parser import TorrentFileParser, InvalidTorrentDataException
 
+from aria2rpc import DEFAULT_ARIA2_JSONRPC, Aria2RpcClient, print_status
+from aria2rpc.config import get_config, guess_path
+
 
 ARIA2_CONFIG = '.config/aria2rpc.json'
-DEFAULT_ARIA2_JSONRPC = 'http://localhost:6800/jsonrpc'
 PATTERN_SUPPORTED_URI = re.compile('(http(s)?|ftp(s)|sftp)://|magnet:')
-
-
-# init logger
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-click_log.basic_config(logger)
 
 
 def is_supported_uri(uri):
@@ -57,40 +52,95 @@ def torrent_filter_file(torrent_info, excludes):
     return selected
 
 
-@click.command()
+def build_exclude_list(filename):
+    exclude_patterns = []
+    if filename:
+        with open(filename) as f:
+            for line in f:
+                line = line.strip()
+                if not line or '#' == line[1]:  # skip empty lines or comment
+                    continue
+                exclude_patterns.append(line)
+    return exclude_patterns
+
+
+@click.group()
+@click.option('--config-file', default=ARIA2_CONFIG,
+              help=f'config of Aria2 JSON-RPC server. '
+                   'if provide both --conf and --json-rpc/--token, prefers to use --json-rpc/--token',
+              show_default=True)
 @click.option('--json-rpc', help='Aria2 JSON-RPC server.')
-@click.option('--token', help='RPC SECRET string')
-@click.option('-d', '--download-dir', help="The directory to store the downloaded file.")
-@click.option('-x', '--exclude-file', default='clean.lst', type=click.File('r'), help="path to file of exclude list.")
-@click.option('--pause', is_flag=True, help='Pause download after added.')
-@click.argument('url-or-torrent-path', nargs=-1, required=True)
-def main(json_rpc, token, download_dir, exclude_file, pause, url_or_torrent_path):
+@click.option('--token', help='RPC SECRET string.')
+@click.option('--debug', is_flag=True, default=False, help="enable debug mode")
+@click.pass_context
+def cli(ctx, config_file, json_rpc, token, debug):
     """Aria2 RPC Client"""
-    config = get_config(ARIA2_CONFIG, {'json-rpc': DEFAULT_ARIA2_JSONRPC})
+    logging.basicConfig(level=logging.DEBUG if debug else logging.WARNING)
+    # init logger
+    logging.basicConfig(level=logging.WARNING)
+    logger = logging.getLogger(__name__)
+    click_log.basic_config(logger)
+
+    guess_paths = [
+        Path.cwd(),  # current dir
+        Path.home(),  # home dir
+        Path.home() / '.config',    # ~/.config
+        Path(__file__).resolve().parent,  # script dir
+    ]
+    config_file_path = guess_path(config_file or ARIA2_CONFIG, guess_paths)
+    if config_file_path is None:
+        config = {'json-rpc': DEFAULT_ARIA2_JSONRPC}
+        if config_file:     # warning if provided the config_file option but not found
+            click.secho(f'Warning: config {config_file} not found in paths: {guess_paths}, ', err=True, fg='yellow')
+    else:
+        config = get_config(config_file_path)
 
     if not json_rpc:
         json_rpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
     if not token:
         token = config.get('token')
 
-    # exclude list
-    exclude_patterns = []
-    if exclude_file:
-        for line in exclude_file:
-            line = line.strip()
-            if not line or '#' == line[1]:    # skip empty lines or comment
-                continue
-            exclude_patterns.append(line)
+    ctx.ensure_object(dict)
+    ctx.obj['json_rpc'] = json_rpc
+    ctx.obj['token'] = token
+    ctx.obj['config'] = config
+    ctx.obj['guess_paths'] = guess_paths
+    ctx.obj['aria2'] = Aria2RpcClient(json_rpc, token=token)
 
-    aria2 = Aria2RpcClient(json_rpc, token=token)
+
+@cli.command()
+@click.option('-d', '--download-dir', type=click.Path(), help="The directory to store the downloaded file.")
+@click.option('-x', '--exclude-file', type=click.Path(exists=False), default='clean.lst',
+              help="path to file of exclude list.", show_default=True)
+@click.option('--pause', 'set_pause', is_flag=True, help='Pause download after added.')
+@click.argument('torrent-files-or-uris', nargs=-1, required=True)
+@click.pass_context
+def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
+    """Add tasks.
+
+    Support: *.torrent, magnet://, http://, https://, ftp://, ftps://, sftp://
+    """
+    config = ctx.obj['config']
+    guess_paths = ctx.obj['guess_paths']
+    aria2 = ctx.obj['aria2']
+
+    click.echo('## Options:')
+    click.echo(f'* download-dir: {download_dir}')
+    click.echo(f'*      exclude: {exclude_file}')
+    click.echo(f'*        pause: {set_pause}')
+    click.echo(f'*        files: {torrent_files_or_uris}')
+
+    exclude_file_path = guess_path(exclude_file, guess_paths) or guess_path(config.get('torrent-filter'), guess_paths)
+    # exclude list
+    exclude_patterns = build_exclude_list(exclude_file_path)
 
     options = {}
     if download_dir:
         options['dir'] = download_dir
-    if pause:
-        options['pause'] = pause
+    if set_pause:
+        options['pause'] = 'true' if set_pause else 'false'
 
-    for uri in url_or_torrent_path:
+    for uri in torrent_files_or_uris:
         click.echo(f'## process {uri}')
         if is_supported_uri(uri):
             # aria2.addUri([secret, ]uris[, options[, position]])
@@ -121,5 +171,90 @@ def main(json_rpc, token, download_dir, exclude_file, pause, url_or_torrent_path
             click.secho(f'Unknown file "{uri}"', err=True, fg='red')
 
 
+@cli.command(name='list')
+@click.option('-a', '--all', 'show_all', is_flag=True, default=False, help="display all status. same as -t -w -c")
+@click.option('-t', '--active', 'show_active', is_flag=True, default=False, help="display active queue.")
+@click.option('-w', '--waiting', 'show_waiting', is_flag=True, default=False, help="display waiting queue.")
+@click.option('-s', '--stopped', 'show_stopped', is_flag=True, default=False, help="display complete/stopped tasks.")
+@click.pass_context
+def list_queue(ctx, show_all, show_active, show_waiting, show_stopped):
+    """Show status of tasks"""
+    aria2 = ctx.obj['aria2']
+
+    show_active = show_active or not (show_waiting or show_stopped)
+    if show_all or show_active:
+        response = aria2.tellActive()
+        print_status(response, title='### Active ###')
+    if show_all or show_waiting:
+        response = aria2.tellWaiting(0, 50)
+        print_status(response, title='### Waiting ###')
+    if show_all or show_stopped:
+        response = aria2.tellStopped(0, 50)
+        print_status(response, title='### Completed/Stopped ###')
+
+
+@cli.command()
+@click.pass_context
+def show():
+    """TODO: Show detail info of a task"""
+
+
+@cli.command()
+@click.pass_context
+def remove():
+    """TODO: Remove a task."""
+
+
+@cli.command()
+@click.pass_context
+def pause():
+    """TODO: pause a task"""
+
+
+@cli.command()
+@click.pass_context
+def pause_all():
+    """TODO: Pause all tasks"""
+
+
+@cli.command()
+@click.pass_context
+def unpause_all():
+    """TODO: Unpause all tasks"""
+
+
+@cli.command()
+@click.pass_context
+def purge(ctx):
+    """Purges completed/error/removed downloads to free memory"""
+    aria2 = ctx.obj['aria2']
+    response = aria2.purgeDownloadResult()
+    click.echo(response)
+
+
+@cli.command()
+@click.pass_context
+def set_priority():
+    """TODO: Change the position of a task"""
+
+
+@cli.command()
+@click.pass_context
+def save_session():
+    """TODO: Save the current session to file (specified by the --save-session option)"""
+
+
+@cli.command()
+@click.pass_context
+def shutdown():
+    """TODO: shut down aria2"""
+
+
+@cli.command()
+@click.pass_context
+def ui():
+    pass
+
+
 if __name__ == '__main__':
-    main()
+    cli()

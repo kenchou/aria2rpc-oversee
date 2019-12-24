@@ -57,3 +57,28 @@ class Aria2RpcResponse:
 
     def __str__(self):
         return json.dumps(self.response)
+
+
+def print_status(response, title=None):
+    if response.error:
+        print(response.error)
+        return
+    if title:
+        print(title)
+    print('{:16}\t{}\t{:12}\t{:12}\t{:9}(%)\t{}'.format('GID', 'Completed', 'Total', 'Progress', 'Speed', 'Name'))
+    for task in response.result:
+        # print('>>> task', json.dumps(task))
+        gid = task['gid']
+        torrent_name = task['bittorrent']['info']['name']
+        completed_length = int(task['completedLength'])
+        download_speed = task['downloadSpeed']
+        total_length = int(task['totalLength'])
+
+        print('{}\t{:12}\t{:12}\t{:9.2f}%\t{:9d}\t{}'.format(
+            gid,
+            completed_length,
+            total_length,
+            completed_length / total_length * 100 if total_length else 0,
+            int(download_speed),
+            torrent_name,
+        ))
