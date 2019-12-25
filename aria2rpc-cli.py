@@ -195,32 +195,38 @@ def list_queue(ctx, show_all, show_active, show_waiting, show_stopped):
 
 @cli.command()
 @click.pass_context
-def show():
+def show(ctx):
     """TODO: Show detail info of a task"""
 
 
 @cli.command()
 @click.pass_context
-def remove():
+def remove(ctx):
     """TODO: Remove a task."""
 
 
 @cli.command()
 @click.pass_context
-def pause():
+def pause(ctx):
     """TODO: pause a task"""
 
 
 @cli.command()
 @click.pass_context
-def pause_all():
-    """TODO: Pause all tasks"""
+def pause_all(ctx):
+    """Pause all tasks"""
+    aria2 = ctx.obj['aria2']
+    response = aria2.pauseAll()
+    click.echo(response)
 
 
 @cli.command()
 @click.pass_context
-def unpause_all():
-    """TODO: Unpause all tasks"""
+def unpause_all(ctx):
+    """Unpause all tasks"""
+    aria2 = ctx.obj['aria2']
+    response = aria2.unpauseAll()
+    click.echo(response)
 
 
 @cli.command()
@@ -234,25 +240,28 @@ def purge(ctx):
 
 @cli.command()
 @click.pass_context
-def set_priority():
+def set_priority(ctx):
     """TODO: Change the position of a task"""
 
 
 @cli.command()
 @click.pass_context
-def save_session():
-    """TODO: Save the current session to file (specified by the --save-session option)"""
+def save_session(ctx):
+    """Save the current session to file (specified by the --save-session option)"""
+    aria2 = ctx.obj['aria2']
+    response = aria2.saveSession()
+    click.echo(response)
 
 
 @cli.command()
 @click.pass_context
-def shutdown():
+def shutdown(ctx):
     """TODO: shut down aria2"""
 
 
 @cli.command()
 @click.pass_context
-def ui():
+def ui(ctx):
     pass
 
 
