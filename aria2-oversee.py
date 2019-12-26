@@ -4,8 +4,7 @@ import click
 import click_log
 import logging
 
-from aria2rpc import Aria2RpcClient, DEFAULT_ARIA2_JSONRPC
-from aria2rpc.config import get_config
+from aria2rpc import get_config, Aria2RpcClient, DEFAULT_ARIA2_JSONRPC
 from time import sleep
 
 

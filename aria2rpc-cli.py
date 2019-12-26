@@ -4,18 +4,16 @@ import base64
 import click
 import click_log
 import logging
-import os.path
 import re
 
 from pathlib import Path
 from fnmatch import fnmatch
 from torrent_parser import TorrentFileParser, InvalidTorrentDataException
 
-from aria2rpc import DEFAULT_ARIA2_JSONRPC, Aria2RpcClient, print_status
-from aria2rpc.config import get_config, guess_path
+from aria2rpc import Aria2RpcClient, print_status, get_config, guess_path, \
+    DEFAULT_CONFIG_PATH, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_JSONRPC, DEFAULT_TORRENT_EXCLUDE_LIST_FILE
 
 
-ARIA2_CONFIG = '.config/aria2rpc.json'
 PATTERN_SUPPORTED_URI = re.compile('(http(s)?|ftp(s)|sftp)://|magnet:')
 
 
@@ -24,11 +22,11 @@ def is_supported_uri(uri):
 
 
 def is_torrent_file(filename):
-    return '.torrent' == os.path.splitext(filename)[1]
+    return '.torrent' == Path(filename).suffix
 
 
 def is_aria2_file(filename):
-    return '.aria2' == os.path.splitext(filename)[1]
+    return '.aria2' == Path(filename).suffix
 
 
 def torrent_filter_file(torrent_info, excludes):
@@ -37,11 +35,11 @@ def torrent_filter_file(torrent_info, excludes):
     selected = []
     for idx, file_info in enumerate(torrent_info['files'], 1):
         include_path = len(file_info['path']) > 1
-        file_path = os.path.join(*file_info['path'])
+        file_path = Path().joinpath(*file_info['path'])
         file_length = file_info["length"]
         _lower_file_path = file_path.lower()  # for fnmatch case-insensitive
         for p in excludes:
-            exclude_pattern = os.path.join('*', p) if include_path else p
+            exclude_pattern = Path('*') / p if include_path else p
             if fnmatch(_lower_file_path, exclude_pattern.lower()):
                 logging.debug(f'{torrent_info["name"]}, match: {exclude_pattern}, '
                               f'skip file: "{file_path}", len: {file_length}')
@@ -65,7 +63,7 @@ def build_exclude_list(filename):
 
 
 @click.group()
-@click.option('--config-file', default=ARIA2_CONFIG,
+@click.option('--config-file', default=DEFAULT_ARIA2_CONFIG,
               help=f'config of Aria2 JSON-RPC server. '
                    'if provide both --conf and --json-rpc/--token, prefers to use --json-rpc/--token',
               show_default=True)
@@ -82,12 +80,11 @@ def cli(ctx, config_file, json_rpc, token, debug):
     click_log.basic_config(logger)
 
     guess_paths = [
-        Path.cwd(),  # current dir
-        Path.home(),  # home dir
-        Path.home() / '.config',    # ~/.config
-        Path(__file__).resolve().parent,  # script dir
+        Path.cwd(),  # current dir ./
+        Path.home() / DEFAULT_CONFIG_PATH,    # ~/.aria2/
+        Path(__file__).resolve().parent / DEFAULT_CONFIG_PATH,  # ${BIN_PATH}/.aria2/
     ]
-    config_file_path = guess_path(config_file or ARIA2_CONFIG, guess_paths)
+    config_file_path = guess_path(config_file or DEFAULT_ARIA2_CONFIG, guess_paths)
     if config_file_path is None:
         config = {'json-rpc': DEFAULT_ARIA2_JSONRPC}
         if config_file:     # warning if provided the config_file option but not found
@@ -109,7 +106,7 @@ def cli(ctx, config_file, json_rpc, token, debug):
 
 
 @cli.command()
-@click.option('-d', '--download-dir', type=click.Path(), help="The directory to store the downloaded file.")
+@click.option('-d', '--download-dir', type=click.Path(exists=False), help="The directory to store the downloaded file.")
 @click.option('-x', '--exclude-file', type=click.Path(exists=False), default='clean.lst',
               help="path to file of exclude list.", show_default=True)
 @click.option('--pause', 'set_pause', is_flag=True, help='Pause download after added.')
@@ -120,7 +117,6 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
 
     Support: *.torrent, magnet://, http://, https://, ftp://, ftps://, sftp://
     """
-    config = ctx.obj['config']
     guess_paths = ctx.obj['guess_paths']
     aria2 = ctx.obj['aria2']
 
@@ -130,7 +126,7 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
     click.echo(f'*        pause: {set_pause}')
     click.echo(f'*        files: {torrent_files_or_uris}')
 
-    exclude_file_path = guess_path(exclude_file, guess_paths) or guess_path(config.get('torrent-filter'), guess_paths)
+    exclude_file_path = guess_path(exclude_file, guess_paths) or guess_path(DEFAULT_TORRENT_EXCLUDE_LIST_FILE, guess_paths)
     # exclude list
     exclude_patterns = build_exclude_list(exclude_file_path)
 
