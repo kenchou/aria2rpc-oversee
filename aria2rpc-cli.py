@@ -132,7 +132,7 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
 
     options = {}
     if download_dir:
-        options['dir'] = download_dir
+        options['dir'] = str(Path(download_dir))
     if set_pause:
         options['pause'] = 'true' if set_pause else 'false'
 

@@ -93,11 +93,11 @@ class Aria2RpcResponse:
         return json.dumps(self.response)
 
 
-def get_download_name(task):
+def get_task_name(task):
     if 'bittorrent' in task:
         return task['bittorrent']['info']['name']
     elif 'files' in task:
-        return ','.join([f['path'] for f in task['files']])
+        return ','.join([Path(f['path']).name for f in task['files']])
     else:
         return None
 
@@ -109,11 +109,11 @@ def print_status(response, title=None):
     if title:
         print(title)
     # print(response)
-    print('{:16}\t{}\t{:12}\t{:12}\t{:9}(%)\t{}'.format('GID', 'Completed', 'Total', 'Progress', 'Speed', 'Name'))
+    print('{:16}\t{}\t{:12}\t{:12}\t{:9}(%)\t{}'.format('GID', 'Completed', 'Total', 'Progress', 'Speed', 'Task_Name'))
     for task in response.result:
         # print('>>> task', json.dumps(task))
         gid = task['gid']
-        filename = get_download_name(task)
+        task_name = get_task_name(task)
         completed_length = int(task['completedLength'])
         download_speed = task['downloadSpeed']
         total_length = int(task['totalLength'])
@@ -123,5 +123,5 @@ def print_status(response, title=None):
             total_length,
             completed_length / total_length * 100 if total_length else 0,
             int(download_speed),
-            filename,
+            task_name,
         ))
