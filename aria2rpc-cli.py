@@ -104,6 +104,7 @@ def cli(ctx, config_file, json_rpc, token, verbose):
     ctx.obj['config'] = config
     ctx.obj['guess_paths'] = guess_paths
     ctx.obj['aria2'] = Aria2RpcClient(json_rpc, token=token)
+    ctx.obj['logger'] = logger
 
 
 @cli.command()
@@ -120,12 +121,12 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
     """
     guess_paths = ctx.obj['guess_paths']
     aria2 = ctx.obj['aria2']
+    logger = ctx.obj['logger']
 
-    click.echo('## Options:')
-    click.echo(f'* download-dir: {download_dir}')
-    click.echo(f'*      exclude: {exclude_file}')
-    click.echo(f'*        pause: {set_pause}')
-    click.echo(f'*        files: {torrent_files_or_uris}')
+    logger.info(f'* download-dir: {download_dir}')
+    logger.info(f'* exclude: {exclude_file}')
+    logger.info(f'* pause: {set_pause}')
+    logger.info(f'* files: {torrent_files_or_uris}')
 
     exclude_file_path = guess_path(exclude_file, guess_paths) or guess_path(DEFAULT_TORRENT_EXCLUDE_LIST_FILE,
                                                                             guess_paths)
@@ -139,7 +140,8 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
         options['pause'] = 'true' if set_pause else 'false'
 
     for uri in torrent_files_or_uris:
-        click.echo(f'## process {uri}')
+        logger.info(f'Add task {uri}')
+        # TODO: check task in queue
         if is_supported_uri(uri):
             # aria2.addUri([secret, ]uris[, options[, position]])
             # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
