@@ -4,43 +4,33 @@ import click
 import click_log
 import logging
 
-from aria2rpc import Aria2RpcClient, DEFAULT_ARIA2_JSONRPC
-from aria2rpc.config import get_config
+from pathlib import Path
 from time import sleep
 
-
-ARIA2_CONFIG = '.config/aria2rpc.json'
-
-log_levels = {
-    0: logging.WARNING,
-    1: logging.INFO,
-    2: logging.DEBUG,
-}
-
-
-def try_call(func, *args, **kwargs):
-    _MAX_DELAY_TIME = 5
-    logger = logging.getLogger('try_call')
-    _sleep_time = 0
-    _retry = True
-    while _retry:
-        _res = func(*args, **kwargs)
-        logger.info('%s%s: %s', func.__name__, args, _res)
-        _retry = _res.error
-        if _retry:
-            _sleep_time += 1 if _sleep_time <= _MAX_DELAY_TIME else 0
-            sleep(_sleep_time)
+from aria2rpc import Aria2RpcClient, Aria2QueueManager, \
+    print_response_status, get_config, guess_path, \
+    LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_JSONRPC
 
 
 @click.command()
+@click.option('--config-file', default=DEFAULT_ARIA2_CONFIG, type=click.Path(),
+              help=f'config of Aria2 JSON-RPC server. '
+                   'if provide both --config-file and --json-rpc/--token, prefers to use --json-rpc/--token',
+              show_default=True)
 @click.option('--json-rpc', help='Aria2 JSON-RPC server. default: {}'.format(DEFAULT_ARIA2_JSONRPC))
 @click.option('--token', help='RPC SECRET string')
 @click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
-def run(json_rpc, token, verbose):
-    logging.basicConfig(level=log_levels.get(verbose, logging.INFO))
+def run(config_file, json_rpc, token, verbose):
+    logging.basicConfig(level=LOG_LEVELS.get(verbose, logging.INFO))
     logger = logging.getLogger(__name__)
+    click_log.basic_config(logger)
 
-    config = get_config(ARIA2_CONFIG, {'json-rpc': DEFAULT_ARIA2_JSONRPC})
+    guess_paths = [
+        Path.home() / DEFAULT_CONFIG_PATH,  # ~/.aria2/
+        Path(__file__).resolve().parent / DEFAULT_CONFIG_PATH,  # ${BIN_PATH}/.aria2/
+    ]
+    config_file_path = guess_path(config_file, guess_paths) or guess_path(DEFAULT_ARIA2_CONFIG, guess_paths)
+    config = get_config(config_file_path)
 
     if not json_rpc:
         json_rpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
@@ -48,58 +38,16 @@ def run(json_rpc, token, verbose):
         token = config.get('token')
 
     aria2 = Aria2RpcClient(url=json_rpc, token=token)
+    aria2_queue_manager = Aria2QueueManager(aria2)
 
-    statistics = {}
     while True:
-        queue = []
-        logger.info('Loop')
-
         response = aria2.tellActive()
-
-        if response.error:
-            print(response.error)
-        else:
-            print('"{:16}\t{:12}\t{:12}\t{:9}(%)\t{}"'.format('GID', 'Completed', 'Total', 'Progress', 'Speed'))
-
-            for task in response.result:
-                gid = task['gid']
-                completed_length = int(task['completedLength'])
-                download_speed = task['downloadSpeed']
-                total_length = int(task['totalLength'])
-
-                print('"{}\t{:12}\t{:12}\t{:9.2f}%\t{:9d}"'.format(
-                    gid,
-                    completed_length, total_length, completed_length/total_length*100 if total_length else 0,
-                    int(download_speed)))
-
-                s = statistics.setdefault(gid, {'completed-length': 0})
-                prev_length = s.get('completed-length', 0)
-                if completed_length - prev_length == 0:
-                    # TODO: compute avg download speed
-                    try_call(aria2.pause, gid)
-                    try_call(aria2.unpause, gid)
-                    queue.append(gid)
-                s['completed-length'] = completed_length
-
-            position = 1000
-            for gid in queue:
-                position += 1
-                r = aria2.changePosition(gid, position, 'POS_SET')
-                logger.info('%s(%s, %s, %s): %s', 'changePosition', gid, position, 'POS_SET', r)
-
-            print('""" waiting """')
-            response = aria2.tellWaiting(0, 20)
-            # print(r.text)
-            for task in response.result:
-                gid = task['gid']
-                completed_length = int(task['completedLength'])
-                download_speed = task['downloadSpeed']
-                total_length = int(task['totalLength'])
-                print('"{}\t{:12}\t{:12}\t{:9.2f}%\t{:9d}"'.format(
-                    gid,
-                    completed_length, total_length, completed_length/total_length*100 if total_length else 0,
-                    int(download_speed)))
-        logger.info('sleep(300)')
+        print_response_status(response)
+        if not response.error:
+            aria2_queue_manager.update(response.result)
+        response = aria2.tellWaiting(0, 20)
+        print_response_status(response, title='### Waiting ###')
+        logger.info('sleep 300s')
         sleep(300)
 
 
