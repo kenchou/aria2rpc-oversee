@@ -38,7 +38,7 @@ def torrent_filter_file(torrent_info, excludes):
         include_path = len(file_info['path']) > 1
         file_path = Path().joinpath(*file_info['path'])
         file_length = file_info["length"]
-        _lower_file_path = file_path.lower()  # for fnmatch case-insensitive
+        _lower_file_path = str(file_path).lower()  # for fnmatch case-insensitive
         for p in excludes:
             exclude_pattern = Path('*') / p if include_path else p
             if fnmatch(_lower_file_path, exclude_pattern.lower()):
