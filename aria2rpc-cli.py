@@ -40,7 +40,7 @@ def torrent_filter_file(torrent_info, excludes):
         file_length = file_info["length"]
         _lower_file_path = str(file_path).lower()  # for fnmatch case-insensitive
         for p in excludes:
-            exclude_pattern = Path('*') / p if include_path else p
+            exclude_pattern = str(Path('*') / p) if include_path else p
             if fnmatch(_lower_file_path, exclude_pattern.lower()):
                 logging.debug(f'{torrent_info["name"]}, match: {exclude_pattern}, '
                               f'skip file: "{file_path}", len: {file_length}')
