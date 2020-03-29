@@ -41,13 +41,18 @@ def run(config_file, json_rpc, token, verbose):
     aria2_queue_manager = Aria2QueueManager(aria2)
 
     while True:
-        response = aria2.tellActive()
-        print_response_status(response)
-        if not response.error:
-            aria2_queue_manager.update(response.result)
-        response = aria2.tellWaiting(0, 20)
-        print_response_status(response, title='### Waiting ###')
-        logger.info('sleep 300s')
+        # has waiting tasks?
+        waiting = aria2.tellWaiting(0, 1)
+        if len(waiting.result):
+            response = aria2.tellActive()
+            print_response_status(response)
+            if not response.error:
+                aria2_queue_manager.update(response.result)
+            waiting = aria2.tellWaiting(0, 20)
+            print_response_status(waiting, title='### Waiting ###')
+        else:
+            logger.info('No waiting tasks in queue.')
+        logger.info('sleep 300s.')
         sleep(300)
 
 
