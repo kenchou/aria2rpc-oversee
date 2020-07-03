@@ -150,9 +150,11 @@ class Aria2QueueManager:
 
 
 def get_task_name(task):
-    if 'bittorrent' in task:
+    try:
         return task['bittorrent']['info']['name']
-    elif 'files' in task:
+    except KeyError:
+        pass
+    if 'files' in task:
         return ','.join([Path(f['path']).name for f in task['files']])
     else:
         return None
