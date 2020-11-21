@@ -3,6 +3,7 @@ import logging
 import requests
 
 from baseconv import base36
+from operator import itemgetter
 from pathlib import Path
 from time import sleep
 
@@ -129,21 +130,22 @@ class Aria2QueueManager:
     def update(self, task_list):
         self.queue = []
         aria2 = self.aria2rpc
+        # Strategy: download size
         for task in task_list:
             gid = task['gid']
             completed_length = int(task['completedLength'])
-            download_speed = task['downloadSpeed']
-            total_length = int(task['totalLength'])
-            s = self.statistics.setdefault(gid, {'completed-length': 0})
+            s = self.statistics.setdefault(gid, {'completed-length': 0, 'increment': 0})
             prev_length = s.get('completed-length', 0)
-            if completed_length - prev_length == 0:
-                # TODO: compute avg download speed
-                try_call(aria2.pause, gid)
-                try_call(aria2.unpause, gid)
-                self.queue.append(gid)
+            increment = completed_length - prev_length
+            if not increment:
+                if gid not in self.queue:
+                    self.queue.append(gid)
             s['completed-length'] = completed_length
+            s['increment'] = increment
         position = 1000
         for gid in self.queue:
+            try_call(aria2.pause, gid)
+            try_call(aria2.unpause, gid)
             position += 1
             r = aria2.changePosition(gid, position, 'POS_SET')
             logging.info('%s(%s, %s, %s): %s', 'changePosition', gid, position, 'POS_SET', r)
