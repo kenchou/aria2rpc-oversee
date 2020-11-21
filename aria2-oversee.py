@@ -43,7 +43,7 @@ def run(config_file, json_rpc, token, verbose):
     while True:
         # has waiting tasks?
         waiting = aria2.tellWaiting(0, 1)
-        if len(waiting.result):
+        if True or len(waiting.result):
             response = aria2.tellActive()
             print_response_status(response)
             if not response.error:
