@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import aria2p
 import base64
 import click
 import click_log
@@ -10,9 +11,9 @@ from pathlib import Path
 from fnmatch import fnmatch
 from torrent_parser import TorrentFileParser, InvalidTorrentDataException
 
-from aria2rpc import Aria2RpcClient, \
-    print_response_status, get_config, guess_path, \
-    LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_JSONRPC, DEFAULT_TORRENT_EXCLUDE_LIST_FILE
+from aria2rpc import get_config, guess_path, \
+    LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_TORRENT_EXCLUDE_LIST_FILE, \
+    DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_HOST, DEFAULT_ARIA2_PORT
 
 
 PATTERN_SUPPORTED_URI = re.compile('(http(s)?|ftp(s)|sftp)://|magnet:')
@@ -68,11 +69,12 @@ def build_exclude_list(filename):
               help=f'config of Aria2 JSON-RPC server. '
                    'if provide both --config-file and --json-rpc/--token, prefers to use --json-rpc/--token',
               show_default=True)
-@click.option('--json-rpc', help='Aria2 JSON-RPC server.')
+@click.option('--host', help='Aria2 JSON-RPC server host.')
+@click.option('--port', help='Aria2 JSON-RPC server port.')
 @click.option('--token', help='RPC SECRET string.')
 @click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
 @click.pass_context
-def cli(ctx, config_file, json_rpc, token, verbose):
+def cli(ctx, config_file, host, port, token, verbose):
     """Aria2 RPC Client"""
     logging.basicConfig(level=LOG_LEVELS.get(verbose, logging.INFO))
     # init logger
@@ -91,19 +93,21 @@ def cli(ctx, config_file, json_rpc, token, verbose):
             exit(1)
     else:
         config_file_path = guess_path(DEFAULT_ARIA2_CONFIG, guess_paths)
-    config = get_config(config_file_path) or {'json-rpc': DEFAULT_ARIA2_JSONRPC}
-
-    if not json_rpc:
-        json_rpc = config.get('json-rpc', DEFAULT_ARIA2_JSONRPC)
-    if not token:
-        token = config.get('token')
+    config = get_config(config_file_path) or {'host': DEFAULT_ARIA2_HOST, 'port': DEFAULT_ARIA2_PORT}
 
     ctx.ensure_object(dict)
-    ctx.obj['json_rpc'] = json_rpc
+    ctx.obj['host'] = host
+    ctx.obj['port'] = port
     ctx.obj['token'] = token
     ctx.obj['config'] = config
     ctx.obj['guess_paths'] = guess_paths
-    ctx.obj['aria2'] = Aria2RpcClient(json_rpc, token=token)
+    ctx.obj['aria2'] = aria2p.API(
+        aria2p.Client(
+            host=host or config.get('host', DEFAULT_ARIA2_HOST),
+            port=port or config.get('port', DEFAULT_ARIA2_PORT),
+            secret=token or config.get('token')
+        )
+    )
     ctx.obj['logger'] = logger
 
 
@@ -145,11 +149,12 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
         if is_supported_uri(uri):
             # aria2.addUri([secret, ]uris[, options[, position]])
             # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
-            response = aria2.addUri([uri], options)
+            response = aria2.add_uris([uri], options)
             click.echo(response)
             pass
         elif is_torrent_file(uri):
             try:
+                # setup option.select-file
                 with open(uri, 'rb') as f:
                     # parse torrent file
                     torrent = TorrentFileParser(f).parse()
@@ -157,10 +162,10 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
                     if selected:
                         options['select-file'] = ','.join(selected)
                     f.seek(0)  # rewind the file
-                    # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
-                    # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
-                    response = aria2.addTorrent(base64.b64encode(f.read()).decode('utf-8'), [], options)
-                    click.echo(response)
+                # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
+                # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
+                response = aria2.add_torrent(uri, [], options)
+                click.echo(response)
             except InvalidTorrentDataException as e:
                 click.secho(f'skip torrent file: "{uri}", reason: {e}', err=True, fg='yellow')
                 continue
@@ -172,49 +177,84 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
 
 
 @cli.command(name='list')
-@click.option('-a', '--all', 'show_all', is_flag=True, default=False, help="display all status. same as -t -w -c")
+@click.option('-a', '--all', 'show_all', is_flag=True, default=False, help="display all status. same as -t -w -s")
 @click.option('-t', '--active', 'show_active', is_flag=True, default=False, help="display active queue.")
 @click.option('-w', '--waiting', 'show_waiting', is_flag=True, default=False, help="display waiting queue.")
+@click.option('-p', '--paused', 'show_paused', is_flag=True, default=False, help="display paused queue.")
 @click.option('-s', '--stopped', 'show_stopped', is_flag=True, default=False, help="display complete/stopped tasks.")
 @click.pass_context
-def list_queue(ctx, show_all, show_active, show_waiting, show_stopped):
+def list_queue(ctx, show_all, show_active, show_waiting, show_paused, show_stopped):
     """Show status of tasks"""
     aria2 = ctx.obj['aria2']
 
     show_active = show_active or not (show_waiting or show_stopped)
-    if show_all or show_active:
-        response = aria2.tellActive()
-        print_response_status(response, title='### Active ###')
-    if show_all or show_waiting:
-        response = aria2.tellWaiting(0, 50)
-        print_response_status(response, title='### Waiting ###')
-    if show_all or show_stopped:
-        response = aria2.tellStopped(0, 50)
-        print_response_status(response, title='### Completed/Stopped ###')
+    for download in aria2.get_downloads():
+        if show_all \
+                or (show_active and download.is_active) \
+                or (show_waiting and download.is_waiting) \
+                or (show_paused and download.is_paused) \
+                or (show_stopped and download.is_complete):
+            print(
+                f"{download.gid:<17} "
+                f"{download.status:<9} "
+                f"{download.progress_string():>8} "
+                f"{download.download_speed_string():>12} "
+                f"{download.upload_speed_string():>12} "
+                f"{download.eta_string():>8}  "
+                f"{download.name}"
+            )
 
 
 @cli.command()
 @click.argument('gid', nargs=-1, required=True)
 @click.pass_context
 def info(ctx, gid):
-    """TODO: Show detail info of a task"""
+    """Show detail info of a task"""
     gid_list = gid
     aria2 = ctx.obj['aria2']
     for gid in gid_list:
-        response = aria2.tellStatus(gid)
-        click.echo(response)
+        download = aria2.get_download(gid)
+        print(
+            f"{download.gid:<17} "
+            f"{download.status:<9} "
+            f"{download.progress_string():>8} "
+            f"{download.download_speed_string():>12} "
+            f"{download.upload_speed_string():>12} "
+            f"{download.eta_string():>8}  "
+            f"{download.name}"
+        )
 
 
 @cli.command()
+@click.argument('gids', nargs=-1)
 @click.pass_context
-def remove(ctx):
+def remove(ctx, gids):
     """TODO: Remove a task."""
+    aria2 = ctx.obj['aria2']
+    downloads = [aria2.get_download(gid) for gid in gids]
+    response = aria2.remove(downloads)
+    for r in response:
+        if isinstance(r, aria2p.client.ClientException):
+            print(f'{r=} {r.message}')
+        else:
+            print(f'{r=}')
 
 
 @cli.command()
+@click.argument('gids', nargs=-1)
 @click.pass_context
-def pause(ctx):
-    """TODO: pause a task"""
+def pause(ctx, gids):
+    """Pause a running/waiting tasks"""
+    aria2 = ctx.obj['aria2']
+    downloads = [aria2.get_download(gid) for gid in gids]
+    response = aria2.pause(downloads)
+    for r in response:
+        if isinstance(r, aria2p.client.ClientException):
+            print(f'{r=} {r.message}')
+        else:
+            print(f'{r=}')
+    for download in downloads:
+        print(f'{download.gid=}, {download.status=}, {download.live.status=}, {download.status=}')
 
 
 @cli.command()
@@ -222,16 +262,33 @@ def pause(ctx):
 def pause_all(ctx):
     """Pause all tasks"""
     aria2 = ctx.obj['aria2']
-    response = aria2.pauseAll()
+    response = aria2.pause_all()
     click.echo(response)
 
 
 @cli.command()
+@click.argument('gids', nargs=-1)
 @click.pass_context
-def unpause_all(ctx):
-    """Unpause all tasks"""
+def resume(ctx, gids):
+    """Resume paused tasks"""
     aria2 = ctx.obj['aria2']
-    response = aria2.unpauseAll()
+    downloads = [aria2.get_download(gid) for gid in gids]
+    response = aria2.resume(downloads)
+    for r in response:
+        if isinstance(r, aria2p.client.ClientException):
+            print(f'{r=} {r.message}')
+        else:
+            print(f'{r=}')
+    for download in downloads:
+        print(f'{download.gid=}, {download.status=}, {download.live.status=}, {download.status=}')
+
+
+@cli.command()
+@click.pass_context
+def resume_all(ctx):
+    """Resume all paused tasks"""
+    aria2 = ctx.obj['aria2']
+    response = aria2.resume_all()
     click.echo(response)
 
 
@@ -240,7 +297,7 @@ def unpause_all(ctx):
 def purge(ctx):
     """Purges completed/error/removed downloads to free memory"""
     aria2 = ctx.obj['aria2']
-    response = aria2.purgeDownloadResult()
+    response = aria2.autopurge()
     click.echo(response)
 
 
@@ -255,7 +312,7 @@ def set_priority(ctx):
 def save_session(ctx):
     """Save the current session to file (specified by the --save-session option)"""
     aria2 = ctx.obj['aria2']
-    response = aria2.saveSession()
+    response = aria2.client.save_session()
     click.echo(response)
 
 
@@ -267,8 +324,30 @@ def shutdown(ctx):
 
 @cli.command()
 @click.pass_context
-def ui(ctx):
-    pass
+def top(ctx):
+    """
+    Top subcommand.
+
+    Parameters:
+        ctx: dict
+
+    Returns:
+        int: always 0.
+    """
+    try:
+        from aria2p.interface import Interface
+    except ImportError:
+        Interface = None
+    if Interface is None:
+        click.secho(
+            "The top-interface dependencies are not installed. Try running `pip install aria2p[tui]` to install them.",
+            fg='red',
+            err=True,
+        )
+        return 1
+    interface = Interface(ctx.obj['aria2'])
+    success = interface.run()
+    return 0 if success else 1
 
 
 if __name__ == '__main__':
