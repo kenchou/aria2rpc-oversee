@@ -1,6 +1,7 @@
 import aria2p
 import json
 import logging
+import signal
 
 from pathlib import Path
 from time import sleep
@@ -56,6 +57,19 @@ def get_config(filename):
         return None
 
 
+def wait(action, condition):
+    try:
+        action()
+    except aria2p.client.ClientException as e:
+        logging.error(e)
+        pass
+    while True:
+        if condition():
+            break
+        logging.debug(f'> DEBUG:waiting status changes')
+        sleep(1)
+
+
 class Aria2QueueManager:
     """Queue Manager"""
     def __init__(self, aria2rpc):
@@ -109,21 +123,13 @@ class Aria2QueueManager:
             s['increment'] = increment
             if not increment:
                 logging.info(f'{task.gid} "{task.name}" move to bottom')
-                task.pause()
-                while True:
-                    if task.live.is_paused:
-                        break
-                    logging.debug(f'> DEBUG:waiting status changes {task.status=}')
-                    sleep(1)
+
+                wait(task.pause, lambda: task.live.is_paused)
                 logging.debug(f'> {task.gid} -> {task.status=}')
-                task.resume()
-                while True:
-                    if task.live.is_waiting:
-                        break
-                    logging.debug(f'> DEBUG:waiting status changes {task.status=}')
-                    sleep(1)
+
+                wait(task.resume, lambda: task.live.is_waiting)
                 logging.debug(f'> {task.gid} -> {task.status=}')
-                logging.debug(f'> {task.gid} move to bottom')
+
                 task.move_to_bottom()
                 cnt += 1
                 if cnt >= task_count:
