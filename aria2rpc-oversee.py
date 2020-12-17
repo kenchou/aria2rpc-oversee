@@ -4,6 +4,7 @@ import aria2p
 import click
 import click_log
 import logging
+import signal
 
 from pathlib import Path
 from time import sleep
@@ -11,6 +12,25 @@ from time import sleep
 from aria2rpc import Aria2QueueManager, \
     get_config, guess_path, \
     LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_HOST, DEFAULT_ARIA2_PORT
+
+
+LOG_FORMAT = '%(asctime)-15s %(message)s'
+
+
+def on_download_complete(api, gid):
+    task: aria2p.downloads.Download
+    task = api.get_download(gid)
+    # purge if it was a magnet metadata download
+    if task.is_metadata:
+        logging.info(f'Purge Complete metadata {task.gid}: "{task.name}".')
+        task.purge()
+        return
+    # move files from tmp dir to another
+    if '.tmp' == task.dir.name:
+        logging.info(f'Complete {task.gid}: move "{task.name}" from {task.dir} to {task.dir.parent}')
+        if task.move_files(task.dir.parent):
+            task.control_file_path.unlink()
+            task.purge()
 
 
 @click.command()
@@ -24,7 +44,8 @@ from aria2rpc import Aria2QueueManager, \
 @click.option('-t', '--interval', default=300, help='Check interval')
 @click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
 def run(config_file, host, port, token, interval, verbose):
-    logging.basicConfig(level=LOG_LEVELS.get(verbose, logging.INFO))
+    max_level = max(LOG_LEVELS, key=int)
+    logging.basicConfig(level=LOG_LEVELS.get(min(verbose, max_level), logging.INFO), format=LOG_FORMAT)
     logger = logging.getLogger(__name__)
     click_log.basic_config(logger)
 
@@ -42,6 +63,19 @@ def run(config_file, host, port, token, interval, verbose):
             secret=token or config.get('token')
         )
     )
+
+    def sigint_handler(sig, frame):
+        aria2.stop_listening()
+        print('You pressed Ctrl+C!')
+        sleep(3)
+        exit(1)
+
+    signal.signal(signal.SIGINT, sigint_handler)
+
+    callbacks = {
+        'on_download_complete': on_download_complete,
+    }
+    aria2.listen_to_notifications(threaded=True, **callbacks)
     aria2_queue_manager = Aria2QueueManager(aria2)
 
     while True:

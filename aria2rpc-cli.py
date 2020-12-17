@@ -147,12 +147,14 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
         logger.info(f'Add task {uri}')
         # TODO: check task in queue
         if is_supported_uri(uri):
+            options['dir'] = str(Path(options['dir']) / '.tmp')
             # aria2.addUri([secret, ]uris[, options[, position]])
             # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
             response = aria2.add_uris([uri], options)
             click.echo(response)
             pass
         elif is_torrent_file(uri):
+            options['dir'] = str(Path(options['dir']) / '.tmp')
             try:
                 # setup option.select-file
                 with open(uri, 'rb') as f:
