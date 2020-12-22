@@ -7,6 +7,7 @@ import logging
 import signal
 
 from pathlib import Path
+from threading import Event
 from time import sleep
 
 from aria2rpc import Aria2QueueManager, \
@@ -14,14 +15,17 @@ from aria2rpc import Aria2QueueManager, \
     LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_HOST, DEFAULT_ARIA2_PORT
 
 
-LOG_FORMAT = '%(asctime)-15s %(message)s'
+LOG_FORMAT = '%(asctime)-15s [%(levelname)s] %(message)s'
+exit_event = Event()
 
 
 def on_download_complete(api, gid):
     task: aria2p.downloads.Download
     task = api.get_download(gid)
     # purge if it was a magnet metadata download
+    logging.info(f'Task {task.gid}: "{task.name}" Download completed.')
     if task.is_metadata:
+        sleep(3)
         logging.info(f'Purge Complete metadata {task.gid}: "{task.name}".')
         task.purge()
         return
@@ -30,7 +34,7 @@ def on_download_complete(api, gid):
         logging.info(f'Complete {task.gid}: move "{task.name}" from {task.dir} to {task.dir.parent}')
         if task.move_files(task.dir.parent):
             task.control_file_path.unlink()
-            task.purge()
+            # task.purge()
 
 
 @click.command()
@@ -67,10 +71,11 @@ def run(config_file, host, port, token, interval, verbose):
     def sigint_handler(sig, frame):
         aria2.stop_listening()
         print('You pressed Ctrl+C!')
-        sleep(3)
-        exit(1)
+        exit_event.set()
 
-    signal.signal(signal.SIGINT, sigint_handler)
+    # register single handler
+    for sig in ('TERM', 'HUP', 'INT'):
+        signal.signal(getattr(signal, 'SIG' + sig), sigint_handler)
 
     callbacks = {
         'on_download_complete': on_download_complete,
@@ -78,10 +83,12 @@ def run(config_file, host, port, token, interval, verbose):
     aria2.listen_to_notifications(threaded=True, **callbacks)
     aria2_queue_manager = Aria2QueueManager(aria2)
 
-    while True:
+    logging.debug('Main loop.')
+    while not exit_event.is_set():
         aria2_queue_manager.run()
         logger.info(f'sleep {interval}s.')
-        sleep(interval)
+        exit_event.wait(interval)
+    logging.debug('Program exit.')
 
 
 if __name__ == "__main__":
