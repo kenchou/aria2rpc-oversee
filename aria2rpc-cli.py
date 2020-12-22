@@ -17,10 +17,15 @@ from aria2rpc import get_config, guess_path, \
 
 
 PATTERN_SUPPORTED_URI = re.compile('(http(s)?|ftp(s)|sftp)://|magnet:')
+PATTERN_MAGNET_URI = re.compile('magnet:')
 
 
 def is_supported_uri(uri):
     return PATTERN_SUPPORTED_URI.match(uri)
+
+
+def is_magnet(uri):
+    return PATTERN_MAGNET_URI.match(uri)
 
 
 def is_torrent_file(filename):
@@ -129,7 +134,7 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
 
     logger.info(f'* download-dir: {download_dir}')
     logger.info(f'* exclude: {exclude_file}')
-    logger.info(f'* pause: {set_pause}')
+    logger.info(f'* pause: {str(set_pause).lower()}')
     logger.info(f'* files: {torrent_files_or_uris}')
 
     exclude_file_path = guess_path(exclude_file, guess_paths) or guess_path(DEFAULT_TORRENT_EXCLUDE_LIST_FILE,
@@ -137,24 +142,25 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
     # exclude list
     exclude_patterns = build_exclude_list(exclude_file_path)
 
-    options = {}
-    if set_pause:
-        options['pause'] = 'true' if set_pause else 'false'
-
     for uri in torrent_files_or_uris:
         logger.info(f'Add task {uri}')
+        options = {}    # init option
         if download_dir:
             options['dir'] = str(Path(download_dir))
+        if set_pause:
+            options['pause'] = str(set_pause).lower()
+
         # TODO: check task in queue
         if is_supported_uri(uri):
-            options['dir'] = str(Path(options['dir']) / '.tmp')
+            if is_magnet(uri):
+                options['dir'] = str(Path(options.get('dir', '')) / '.tmp')
             # aria2.addUri([secret, ]uris[, options[, position]])
             # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
             response = aria2.add_uris([uri], options)
             click.echo(response)
             pass
         elif is_torrent_file(uri):
-            options['dir'] = str(Path(options['dir']) / '.tmp')
+            options['dir'] = str(Path(options.get('dir', '')) / '.tmp')
             try:
                 # setup option.select-file
                 with open(uri, 'rb') as f:
