@@ -138,13 +138,13 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
     exclude_patterns = build_exclude_list(exclude_file_path)
 
     options = {}
-    if download_dir:
-        options['dir'] = str(Path(download_dir))
     if set_pause:
         options['pause'] = 'true' if set_pause else 'false'
 
     for uri in torrent_files_or_uris:
         logger.info(f'Add task {uri}')
+        if download_dir:
+            options['dir'] = str(Path(download_dir))
         # TODO: check task in queue
         if is_supported_uri(uri):
             options['dir'] = str(Path(options['dir']) / '.tmp')
