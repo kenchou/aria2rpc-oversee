@@ -63,9 +63,7 @@ def wait(action, condition):
     except aria2p.client.ClientException as e:
         logging.error(e)
         pass
-    while True:
-        if condition():
-            break
+    while not condition():
         logging.debug(f'> DEBUG:waiting status changes')
         sleep(1)
 
