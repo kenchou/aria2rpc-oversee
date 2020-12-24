@@ -1,0 +1,11 @@
+[Unit]
+Description=Aria2 File Download Manager
+After=network.target
+
+[Service]
+User=ken
+ExecStart=/usr/bin/aria2c --conf-path={HOME}/.aria2/aria2.conf --enable-rpc --rpc-listen-all=true --rpc-allow-origin-all
+Restart=always
+
+[Install]
+WantedBy=default.target
