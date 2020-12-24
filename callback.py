@@ -1,4 +1,7 @@
 # ~/callbacks.py
+
+import aria2p
+import logging
 import subprocess
 from pathlib import Path
 
@@ -12,14 +15,17 @@ def on_download_error(api, gid):
 
 
 def on_download_complete(api, gid):
-    download = api.get_download(gid)
+    task: aria2p.downloads.Download
+    task = api.get_download(gid)
     # purge if it was a magnet metadata download
-    if download.is_metadata:
-        download.purge()
+    if task.is_metadata:
+        logging.info(f'Purge Complete metadata {task.gid}: "{task.name}".')
+        task.purge()
         return
-    # move files to another folder
-    destination = Path(download.dir) / "Completed"
-    if download.move_files(destination):
-        download.control_file_path.unlink()
-        download.purge()
-
+    # move files from tmp dir to another
+    if '.tmp' == task.dir.name:
+        destination = Path(task.dir.parent)
+        logging.info(f'Complete {task.gid}: move "{task.name}" from {task.dir} to {destination}')
+        if task.move_files(destination):
+            task.control_file_path.unlink()
+            task.purge()
