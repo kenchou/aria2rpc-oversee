@@ -4,6 +4,7 @@ import aria2p
 import click
 import click_log
 import logging
+import requests.exceptions
 import signal
 
 from pathlib import Path
@@ -51,7 +52,7 @@ def run(config_file, host, port, token, interval, verbose):
 
     def sigint_handler(sig, frame):
         aria2.stop_listening()
-        print('You pressed Ctrl+C!')
+        print('You pressed Ctrl+C! Wait for exit.')
         exit_event.set()
 
     # register single handler
@@ -62,10 +63,13 @@ def run(config_file, host, port, token, interval, verbose):
 
     logging.debug('Main loop.')
     while not exit_event.is_set():
-        aria2_queue_manager.run()
+        try:
+            aria2_queue_manager.run()
+        except requests.exceptions.ConnectTimeout as e:
+            logging.warning('Connect Timeout: %s', str(e))
         logger.info(f'sleep {interval}s.')
         exit_event.wait(interval)
-    logging.debug('Program exit.')
+    click.secho('Program exit.', fg='green')
 
 
 if __name__ == "__main__":

@@ -19,3 +19,5 @@ click_log == 0.3.2
 # aria2rpc-cli.py: 12
 # show-torrent-info.py: 7
 torrent_parser == 0.3.0
+
+requests~=2.25.0

@@ -61,11 +61,11 @@ def wait(action, condition):
     try:
         action()
     except aria2p.client.ClientException as e:
-        logging.error(e)
+        logging.error('ClientException: ' + str(e))
         pass
     while not condition():
         logging.debug(f'> DEBUG:waiting status changes')
-        sleep(1)
+        sleep(3)
 
 
 class Aria2QueueManager:
@@ -120,13 +120,15 @@ class Aria2QueueManager:
             s['completed-length'] = completed_length
             s['increment'] = increment
             if not increment:
-                logging.info(f'{task.gid} "{task.name}" move to bottom')
+                logging.info(f'swap {cnt=}/{task_count=}: {task.gid} "{task.name}" move to bottom')
 
                 wait(task.pause, lambda: task.live.is_paused)
-                logging.debug(f'> {task.gid} -> {task.status=}')
+                logging.debug(f'> {cnt=}/{task_count=}: {task.gid} -> {task.status=}')
+
+                sleep(1)
 
                 wait(task.resume, lambda: task.live.is_waiting)
-                logging.debug(f'> {task.gid} -> {task.status=}')
+                logging.debug(f'> {cnt=}/{task_count=}: {task.gid} -> {task.status=}')
 
                 task.move_to_bottom()
                 cnt += 1
