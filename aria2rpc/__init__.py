@@ -86,7 +86,7 @@ class Aria2QueueManager:
                 task_waiting.append(download)
             elif download.is_complete:
                 continue
-            print(
+            logging.info(
                 f"{download.gid:<17} "
                 f"{download.status:<9} "
                 f"{download.progress_string():>8} "
@@ -101,6 +101,8 @@ class Aria2QueueManager:
         task_active, task_waiting = self.get_data()
         if task_waiting:
             self.update(task_active, len(task_waiting))
+        else:
+            logging.info('No waiting tasks')
 
     def update(self, task_list, task_count):
         """
