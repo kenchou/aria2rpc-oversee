@@ -19,6 +19,16 @@ LOG_FORMAT = '%(asctime)-15s [%(levelname)s] %(message)s'
 exit_event = Event()
 
 
+def register_single():
+    def sigint_handler(sig, frame):
+        exit_event.set()
+        print('You pressed Ctrl+C! Wait for exit.')
+
+    # register single handler
+    for sig in ('TERM', 'HUP', 'INT'):
+        signal.signal(getattr(signal, 'SIG' + sig), sigint_handler)
+
+
 @click.command()
 @click.option('--config-file', default=DEFAULT_ARIA2_CONFIG, type=click.Path(),
               help='config of Aria2 JSON-RPC server. '
@@ -33,6 +43,7 @@ def run(config_file, host, port, token, interval, verbose):
     max_level = max(LOG_LEVELS, key=int)
     logging.basicConfig(level=LOG_LEVELS.get(min(verbose, max_level), logging.INFO), format=LOG_FORMAT)
     logger = logging.getLogger(__name__)
+    logger.setLevel(LOG_LEVELS.get(min(verbose, max_level), logging.INFO))
     click_log.basic_config(logger)
 
     guess_paths = [
@@ -50,14 +61,7 @@ def run(config_file, host, port, token, interval, verbose):
         )
     )
 
-    def sigint_handler(sig, frame):
-        aria2.stop_listening()
-        print('You pressed Ctrl+C! Wait for exit.')
-        exit_event.set()
-
-    # register single handler
-    for sig in ('TERM', 'HUP', 'INT'):
-        signal.signal(getattr(signal, 'SIG' + sig), sigint_handler)
+    register_single()
 
     aria2_queue_manager = Aria2QueueManager(aria2)
 
