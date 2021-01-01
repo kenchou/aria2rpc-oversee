@@ -1,0 +1,13 @@
+[Unit]
+Description=Aria2 File Download Manager
+After=network.target aria2rpc.service
+Wants=aria2rpc.service
+
+[Service]
+User=ken
+ExecStart={INSTALL_PATH}/aria2rpc-oversee.py
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
