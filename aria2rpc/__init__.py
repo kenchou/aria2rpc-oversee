@@ -1,6 +1,7 @@
 import aria2p
 import json
 import logging
+import signal
 
 from pathlib import Path
 from time import sleep
@@ -56,6 +57,17 @@ def get_config(filename):
         return None
 
 
+def wait(action, condition):
+    try:
+        action()
+    except aria2p.client.ClientException as e:
+        logging.error('ClientException: ' + str(e))
+        pass
+    while not condition():
+        logging.debug(f'> DEBUG:waiting status changes')
+        sleep(3)
+
+
 class Aria2QueueManager:
     """Queue Manager"""
     def __init__(self, aria2rpc):
@@ -74,7 +86,7 @@ class Aria2QueueManager:
                 task_waiting.append(download)
             elif download.is_complete:
                 continue
-            print(
+            logging.info(
                 f"{download.gid:<17} "
                 f"{download.status:<9} "
                 f"{download.progress_string():>8} "
@@ -89,6 +101,8 @@ class Aria2QueueManager:
         task_active, task_waiting = self.get_data()
         if task_waiting:
             self.update(task_active, len(task_waiting))
+        else:
+            logging.info('No waiting tasks')
 
     def update(self, task_list, task_count):
         """
@@ -108,22 +122,16 @@ class Aria2QueueManager:
             s['completed-length'] = completed_length
             s['increment'] = increment
             if not increment:
-                logging.info(f'{task.gid} "{task.name}" move to bottom')
-                task.pause()
-                while True:
-                    if task.live.is_paused:
-                        break
-                    logging.debug(f'> DEBUG:waiting status changes {task.status=}')
-                    sleep(1)
-                logging.debug(f'> {task.gid} -> {task.status=}')
-                task.resume()
-                while True:
-                    if task.live.is_waiting:
-                        break
-                    logging.debug(f'> DEBUG:waiting status changes {task.status=}')
-                    sleep(1)
-                logging.debug(f'> {task.gid} -> {task.status=}')
-                logging.debug(f'> {task.gid} move to bottom')
+                logging.info(f'swap {cnt=}/{task_count=}: {task.gid} "{task.name}" move to bottom')
+
+                wait(task.pause, lambda: task.live.is_paused)
+                logging.debug(f'> {cnt=}/{task_count=}: {task.gid} -> {task.status=}')
+
+                sleep(1)
+
+                wait(task.resume, lambda: task.live.is_waiting)
+                logging.debug(f'> {cnt=}/{task_count=}: {task.gid} -> {task.status=}')
+
                 task.move_to_bottom()
                 cnt += 1
                 if cnt >= task_count:

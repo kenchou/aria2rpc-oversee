@@ -4,13 +4,29 @@ import aria2p
 import click
 import click_log
 import logging
+import requests.exceptions
+import signal
 
 from pathlib import Path
-from time import sleep
+from threading import Event
 
 from aria2rpc import Aria2QueueManager, \
     get_config, guess_path, \
     LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_HOST, DEFAULT_ARIA2_PORT
+
+
+LOG_FORMAT = '%(asctime)-15s [%(levelname)s] %(message)s'
+exit_event = Event()
+
+
+def register_single():
+    def sigint_handler(sig, frame):
+        exit_event.set()
+        print('You pressed Ctrl+C! Wait for exit.')
+
+    # register single handler
+    for sig in ('TERM', 'HUP', 'INT'):
+        signal.signal(getattr(signal, 'SIG' + sig), sigint_handler)
 
 
 @click.command()
@@ -24,8 +40,10 @@ from aria2rpc import Aria2QueueManager, \
 @click.option('-t', '--interval', default=300, help='Check interval')
 @click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
 def run(config_file, host, port, token, interval, verbose):
-    logging.basicConfig(level=LOG_LEVELS.get(verbose, logging.INFO))
+    max_level = max(LOG_LEVELS, key=int)
+    logging.basicConfig(level=LOG_LEVELS.get(min(verbose, max_level), logging.INFO), format=LOG_FORMAT)
     logger = logging.getLogger(__name__)
+    logger.setLevel(LOG_LEVELS.get(min(verbose, max_level), logging.INFO))
     click_log.basic_config(logger)
 
     guess_paths = [
@@ -42,12 +60,20 @@ def run(config_file, host, port, token, interval, verbose):
             secret=token or config.get('token')
         )
     )
+
+    register_single()
+
     aria2_queue_manager = Aria2QueueManager(aria2)
 
-    while True:
-        aria2_queue_manager.run()
+    logging.debug('Main loop.')
+    while not exit_event.is_set():
+        try:
+            aria2_queue_manager.run()
+        except requests.exceptions.ConnectTimeout as e:
+            logging.warning('Connect Timeout: %s', str(e))
         logger.info(f'sleep {interval}s.')
-        sleep(interval)
+        exit_event.wait(interval)
+    click.secho('Program exit.', fg='green')
 
 
 if __name__ == "__main__":
