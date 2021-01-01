@@ -221,16 +221,16 @@ def info(ctx, gid):
     gid_list = gid
     aria2 = ctx.obj['aria2']
     for gid in gid_list:
-        download = aria2.get_download(gid)
-        print(
-            f"{download.gid:<17} "
-            f"{download.status:<9} "
-            f"{download.progress_string():>8} "
-            f"{download.download_speed_string():>12} "
-            f"{download.upload_speed_string():>12} "
-            f"{download.eta_string():>8}  "
-            f"{download.name}"
-        )
+        task = aria2.get_download(gid)
+        print(f"+ {task.name}")
+        print(f"  - {task.error_code=}, {task.error_message}")
+        print(f"  - {task.dir}")
+        print(f"  - {task.gid:<17} "
+              f"{task.status:<9} "
+              f"{task.progress_string():>8} "
+              f"{task.download_speed_string():>12} "
+              f"{task.upload_speed_string():>12} "
+              f"{task.eta_string():>8}")
 
 
 @cli.command()
