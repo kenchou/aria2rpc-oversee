@@ -57,25 +57,23 @@ def get_config(filename):
         return None
 
 
-def wait(action, condition):
+def change_status(action):
     try:
         action()
     except aria2p.client.ClientException as e:
         logging.error('ClientException: ' + str(e))
-        pass
-    while not condition():
-        logging.debug(f'> DEBUG:waiting status changes')
-        sleep(3)
 
 
 class Aria2QueueManager:
     """Queue Manager"""
-    def __init__(self, aria2rpc):
+    def __init__(self, aria2rpc, exit_event):
         self.queue = []
         self.statistics = {}
         self.aria2rpc = aria2rpc
+        self.exit_event = exit_event
 
     def get_data(self):
+        logging.debug('Fetch tasks from RPC')
         downloads = self.aria2rpc.get_downloads()
         task_active = []
         task_waiting = []
@@ -104,6 +102,11 @@ class Aria2QueueManager:
         else:
             logging.info('No waiting tasks')
 
+    def task_wait_status(self, task, status):
+        while not self.exit_event.is_set() and not getattr(task.live, status):
+            logging.debug(f'> Waiting status changes, current status: {task.status}')
+            self.exit_event.wait(5)
+
     def update(self, task_list, task_count):
         """
         Strategy of task swap: download size
@@ -122,15 +125,17 @@ class Aria2QueueManager:
             s['completed-length'] = completed_length
             s['increment'] = increment
             if not increment:
-                logging.info(f'swap {cnt=}/{task_count=}: {task.gid} "{task.name}" move to bottom')
+                logging.info(f'swap {cnt}/{task_count}: {task.gid} "{task.name}" move to bottom')
 
-                wait(task.pause, lambda: task.live.is_paused)
-                logging.debug(f'> {cnt=}/{task_count=}: {task.gid} -> {task.status=}')
+                change_status(task.pause)
+                self.task_wait_status(task, 'is_paused')
+                logging.debug(f'> CNT: {cnt}/{task_count}: {task.gid} -> {task.status=}')
 
-                sleep(1)
+                self.exit_event.wait(1)
 
-                wait(task.resume, lambda: task.live.is_waiting)
-                logging.debug(f'> {cnt=}/{task_count=}: {task.gid} -> {task.status=}')
+                change_status(task.resume)
+                self.task_wait_status(task, 'is_waiting')
+                logging.debug(f'> CNT: {cnt}/{task_count}: {task.gid} -> {task.status=}')
 
                 task.move_to_bottom()
                 cnt += 1
