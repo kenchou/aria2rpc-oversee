@@ -64,20 +64,16 @@ def change_status(action):
         logging.error('ClientException: ' + str(e))
 
 
-def wait(task, condition):
-    while not condition(task):
-        logging.debug(f'> DEBUG:waiting status changes')
-        sleep(3)
-
-
 class Aria2QueueManager:
     """Queue Manager"""
-    def __init__(self, aria2rpc):
+    def __init__(self, aria2rpc, exit_event):
         self.queue = []
         self.statistics = {}
         self.aria2rpc = aria2rpc
+        self.exit_event = exit_event
 
     def get_data(self):
+        logging.debug('Fetch tasks from RPC')
         downloads = self.aria2rpc.get_downloads()
         task_active = []
         task_waiting = []
@@ -106,6 +102,11 @@ class Aria2QueueManager:
         else:
             logging.info('No waiting tasks')
 
+    def task_wait_status(self, task, status):
+        while not self.exit_event.is_set() and not getattr(task.live, status):
+            logging.debug(f'> Waiting status changes, current status: {task.status}')
+            self.exit_event.wait(5)
+
     def update(self, task_list, task_count):
         """
         Strategy of task swap: download size
@@ -127,13 +128,13 @@ class Aria2QueueManager:
                 logging.info(f'swap {cnt}/{task_count}: {task.gid} "{task.name}" move to bottom')
 
                 change_status(task.pause)
-                wait(task, lambda x: x.live.is_paused)
+                self.task_wait_status(task, 'is_paused')
                 logging.debug(f'> CNT: {cnt}/{task_count}: {task.gid} -> {task.status=}')
 
-                sleep(1)
+                self.exit_event.wait(1)
 
                 change_status(task.resume)
-                wait(task, lambda x: x.live.is_waiting)
+                self.task_wait_status(task, 'is_waiting')
                 logging.debug(f'> CNT: {cnt}/{task_count}: {task.gid} -> {task.status=}')
 
                 task.move_to_bottom()
