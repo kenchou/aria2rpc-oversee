@@ -63,7 +63,7 @@ def run(config_file, host, port, token, interval, verbose):
 
     register_single()
 
-    aria2_queue_manager = Aria2QueueManager(aria2)
+    aria2_queue_manager = Aria2QueueManager(aria2, exit_event)
 
     logging.debug('Main loop.')
     while not exit_event.is_set():
