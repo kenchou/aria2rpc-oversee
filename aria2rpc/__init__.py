@@ -57,6 +57,7 @@ def load_config_file(filename):
 
 
 def load_aria2_config(config_file, guess_paths=None):
+    default_config = {'host': DEFAULT_ARIA2_HOST, 'port': DEFAULT_ARIA2_PORT}
     if guess_paths is None:
         guess_paths = [
             Path.home() / DEFAULT_CONFIG_PATH,  # ~/.aria2/
@@ -65,11 +66,11 @@ def load_aria2_config(config_file, guess_paths=None):
     config_file_path = guess_path(config_file, guess_paths) or guess_path(DEFAULT_ARIA2_CONFIG, guess_paths)
     if config_file_path is None:
         logger.error(f'--config-file "{config_file}" not found in paths: {[str(p) for p in guess_paths]}')
-        config = {'host': DEFAULT_ARIA2_HOST, 'port': DEFAULT_ARIA2_PORT}
+        config = {}
     else:
         logger.info(f'config_file: {config_file_path}')
         config = load_config_file(config_file_path)
-    return config
+    return {**default_config, **config}
 
 
 class Aria2QueueManager:
