@@ -67,6 +67,7 @@ def load_aria2_config(config_file, guess_paths=None):
         logger.error(f'--config-file "{config_file}" not found in paths: {[str(p) for p in guess_paths]}')
         config = {'host': DEFAULT_ARIA2_HOST, 'port': DEFAULT_ARIA2_PORT}
     else:
+        logger.info(f'config_file: {config_file_path}')
         config = load_config_file(config_file_path)
     return config
 
