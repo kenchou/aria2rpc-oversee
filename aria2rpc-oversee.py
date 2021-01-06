@@ -7,22 +7,20 @@ import logging
 import requests.exceptions
 import signal
 
-from pathlib import Path
 from threading import Event
 
-from aria2rpc import Aria2QueueManager, \
-    get_config, guess_path, \
-    LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_HOST, DEFAULT_ARIA2_PORT
+from aria2rpc import load_aria2_config, Aria2QueueManager, \
+    LOG_LEVELS, DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_HOST, DEFAULT_ARIA2_PORT
 
 
-LOG_FORMAT = '%(asctime)-15s [%(levelname)s] %(message)s'
+LOG_FORMAT = '%(asctime)s - %(name)s - [%(levelname)s] %(message)s'
 exit_event = Event()
 
 
 def register_single():
-    def sigint_handler(sig, frame):
+    def sigint_handler(signum, _frame):
         exit_event.set()
-        print('You pressed Ctrl+C! Wait for exit.')
+        logging.info(f'Interrupt by signal {signal.Signals(signum).name}. Waiting for graceful exit.')
 
     # register single handler
     for sig in ('TERM', 'HUP', 'INT'):
@@ -45,18 +43,16 @@ def run(config_file, host, port, token, interval, verbose):
     logger = logging.getLogger(__name__)
     logger.setLevel(LOG_LEVELS.get(min(verbose, max_level), logging.INFO))
     click_log.basic_config(logger)
+    # requests logger
+    if verbose < 3:
+        logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 
-    guess_paths = [
-        Path.home() / DEFAULT_CONFIG_PATH,  # ~/.aria2/
-        Path(__file__).resolve().parent / DEFAULT_CONFIG_PATH,  # ${BIN_PATH}/.aria2/
-    ]
-    config_file_path = guess_path(config_file, guess_paths) or guess_path(DEFAULT_ARIA2_CONFIG, guess_paths)
-    config = get_config(config_file_path)
+    config = load_aria2_config(config_file)
 
     aria2 = aria2p.API(
         aria2p.Client(
-            host=host or config.get('host', DEFAULT_ARIA2_HOST),
-            port=port or config.get('port', DEFAULT_ARIA2_PORT),
+            host=host or config.get('host'),
+            port=port or config.get('port'),
             secret=token or config.get('token')
         )
     )
@@ -65,12 +61,12 @@ def run(config_file, host, port, token, interval, verbose):
 
     aria2_queue_manager = Aria2QueueManager(aria2, exit_event)
 
-    logging.debug('Main loop.')
+    logger.debug('Main loop.')
     while not exit_event.is_set():
         try:
             aria2_queue_manager.run()
         except requests.exceptions.ConnectTimeout as e:
-            logging.warning('Connect Timeout: %s', str(e))
+            logger.warning('Connect Timeout: %s', str(e))
         logger.info(f'sleep {interval}s.')
         exit_event.wait(interval)
     click.secho('Program exit.', fg='green')
