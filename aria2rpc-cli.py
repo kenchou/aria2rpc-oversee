@@ -148,7 +148,7 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
             # aria2.addUri([secret, ]uris[, options[, position]])
             # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
             task = aria2.add_uris([uri], options)
-            click.echo(task_briefing(task))
+            click.echo(f'Create task {task.gid}')
         elif is_torrent_file(uri):
             options['dir'] = str(Path(options.get('dir', '')) / '.tmp')
             try:
@@ -163,7 +163,7 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
                 # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
                 # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
                 task = aria2.add_torrent(uri, [], options)
-                click.echo(task_briefing(task))
+                click.echo(f'Create task {task.gid}')
             except InvalidTorrentDataException as e:
                 click.secho(f'skip torrent file: "{uri}", reason: {e}', err=True, fg='yellow')
                 continue
