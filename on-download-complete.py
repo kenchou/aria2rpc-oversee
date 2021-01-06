@@ -3,7 +3,6 @@
 
 import aria2p
 import click
-import click_log
 import logging
 import subprocess
 
@@ -14,6 +13,7 @@ from aria2rpc import load_aria2_config, \
 
 
 LOG_FORMAT = '%(asctime)-15s [%(levelname)s] %(message)s'
+logger = logging.getLogger()
 
 
 def on_download_error(api, gid):
@@ -42,13 +42,13 @@ def on_download_complete(api, gid):
     print_task_info(task)
     # purge magnet metadata task
     if task.is_metadata:
-        logging.info(f'Purge Complete metadata {task.gid}: "{task.name}".')
+        logger.info(f'Purge Complete metadata {task.gid}: "{task.name}".')
         task.purge()
         return
     # move files from tmp dir to another
     if '.tmp' == task.dir.name:
         destination = Path(task.dir.parent)
-        logging.info(f'Complete {task.gid}: move "{task.name}" from {task.dir} to {destination}')
+        logger.info(f'Complete {task.gid}: move "{task.name}" from {task.dir} to {destination}')
         if task.move_files(destination):
             control_file = task.control_file_path
             if control_file.exists():
@@ -70,7 +70,15 @@ def on_download_complete(api, gid):
 @click.option('--token', help='RPC SECRET string')
 @click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
 def cli(gid, file_count, destination, config_file, host, port, token, verbose):
-    logging.basicConfig(level=LOG_LEVELS.get(verbose, logging.INFO))
+    logging.basicConfig(level=LOG_LEVELS.get(verbose, logging.INFO), format=LOG_FORMAT)
+
+    fh = logging.FileHandler('/tmp/aria2-event.log')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter(LOG_FORMAT))
+    logger.addHandler(fh)
+
+    logger.info(f'{gid}, {file_count}, "{destination}"')
+
     config = load_aria2_config(config_file)
     on_download_complete(
         aria2p.API(
