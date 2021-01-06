@@ -68,18 +68,19 @@ def on_download_complete(api, gid):
 @click.option('--host', help='Aria2 JSON-RPC server host. default: {}'.format(DEFAULT_ARIA2_HOST))
 @click.option('--port', help='Aria2 JSON-RPC server port. default: {}'.format(DEFAULT_ARIA2_PORT))
 @click.option('--token', help='RPC SECRET string')
-@click.option('-v', '--verbose', count=True, help='Increase output verbosity.')
-def cli(gid, file_count, destination, config_file, host, port, token, verbose):
-    logging.basicConfig(level=LOG_LEVELS.get(verbose, logging.INFO), format=LOG_FORMAT)
+def cli(gid, file_count, destination, config_file, host, port, token):
+    logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
     fh = logging.FileHandler('/tmp/aria2-event.log')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter(LOG_FORMAT))
     logger.addHandler(fh)
 
-    logger.info(f'{gid}, {file_count}, "{destination}"')
+    logger.info(f'Arguments: {gid} {file_count} "{destination}"')
 
     config = load_aria2_config(config_file)
+    logger.debug(config)
+
     on_download_complete(
         aria2p.API(
             aria2p.Client(
