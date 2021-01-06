@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import aria2p
-import base64
 import click
 import click_log
 import logging
@@ -11,9 +10,8 @@ from pathlib import Path
 from fnmatch import fnmatch
 from torrent_parser import TorrentFileParser, InvalidTorrentDataException
 
-from aria2rpc import get_config, guess_path, \
-    LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_TORRENT_EXCLUDE_LIST_FILE, \
-    DEFAULT_ARIA2_CONFIG, DEFAULT_ARIA2_HOST, DEFAULT_ARIA2_PORT
+from aria2rpc import load_aria2_config, guess_path, task_briefing, \
+    LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_TORRENT_EXCLUDE_LIST_FILE
 
 
 PATTERN_SUPPORTED_URI = re.compile('(http(s)?|ftp(s)|sftp)://|magnet:')
@@ -91,14 +89,7 @@ def cli(ctx, config_file, host, port, token, verbose):
         Path.home() / DEFAULT_CONFIG_PATH,  # ~/.aria2/
         Path(__file__).resolve().parent / DEFAULT_CONFIG_PATH,  # ${BIN_PATH}/.aria2/
     ]
-    if config_file is not None:
-        config_file_path = guess_path(config_file, guess_paths)
-        if config_file_path is None:
-            logger.error(f'--config-file "{config_file}" not found in paths: {[str(p) for p in guess_paths]}')
-            exit(1)
-    else:
-        config_file_path = guess_path(DEFAULT_ARIA2_CONFIG, guess_paths)
-    config = get_config(config_file_path) or {'host': DEFAULT_ARIA2_HOST, 'port': DEFAULT_ARIA2_PORT}
+    config = load_aria2_config(config_file, guess_paths=guess_paths)
 
     ctx.ensure_object(dict)
     ctx.obj['host'] = host
@@ -108,8 +99,8 @@ def cli(ctx, config_file, host, port, token, verbose):
     ctx.obj['guess_paths'] = guess_paths
     ctx.obj['aria2'] = aria2p.API(
         aria2p.Client(
-            host=host or config.get('host', DEFAULT_ARIA2_HOST),
-            port=port or config.get('port', DEFAULT_ARIA2_PORT),
+            host=host or config.get('host'),
+            port=port or config.get('port'),
             secret=token or config.get('token')
         )
     )
@@ -156,9 +147,8 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
                 options['dir'] = str(Path(options.get('dir', '')) / '.tmp')
             # aria2.addUri([secret, ]uris[, options[, position]])
             # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
-            response = aria2.add_uris([uri], options)
-            click.echo(response)
-            pass
+            task = aria2.add_uris([uri], options)
+            click.echo(f'Create task {task.gid}')
         elif is_torrent_file(uri):
             options['dir'] = str(Path(options.get('dir', '')) / '.tmp')
             try:
@@ -172,8 +162,8 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
                     f.seek(0)  # rewind the file
                 # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
                 # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
-                response = aria2.add_torrent(uri, [], options)
-                click.echo(response)
+                task = aria2.add_torrent(uri, [], options)
+                click.echo(f'Create task {task.gid}')
             except InvalidTorrentDataException as e:
                 click.secho(f'skip torrent file: "{uri}", reason: {e}', err=True, fg='yellow')
                 continue
@@ -225,12 +215,7 @@ def info(ctx, gid):
         print(f"+ {task.name}")
         print(f"  - {task.error_code=}, {task.error_message}")
         print(f"  - {task.dir}")
-        print(f"  - {task.gid:<17} "
-              f"{task.status:<9} "
-              f"{task.progress_string():>8} "
-              f"{task.download_speed_string():>12} "
-              f"{task.upload_speed_string():>12} "
-              f"{task.eta_string():>8}")
+        print(f"  - {task_briefing(task)}")
 
 
 @cli.command()
@@ -356,6 +341,14 @@ def top(ctx):
     interface = Interface(ctx.obj['aria2'])
     success = interface.run()
     return 0 if success else 1
+
+
+@cli.command('config')
+@click.pass_context
+def display_config(ctx):
+    """show config"""
+    for k, v in ctx.obj.items():
+        print(f'{k}: {v}')
 
 
 if __name__ == '__main__':
