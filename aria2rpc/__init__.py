@@ -73,6 +73,16 @@ def load_aria2_config(config_file, guess_paths=None):
     return {**default_config, **config}
 
 
+def task_briefing(task):
+    return f"{task.gid:<17} " \
+           f"{task.status:<9} " \
+           f"{task.progress_string():>8} " \
+           f"{task.download_speed_string():>12} " \
+           f"{task.upload_speed_string():>12} " \
+           f"{task.eta_string():>8}  " \
+           f"{task.name}"
+
+
 class Aria2QueueManager:
     """Queue Manager"""
     def __init__(self, aria2rpc, exit_event):
@@ -84,25 +94,17 @@ class Aria2QueueManager:
 
     def get_data(self):
         self.logger.debug(f'Fetch tasks from RPC')
-        downloads = self.aria2rpc.get_downloads()
+        tasks = self.aria2rpc.get_downloads()
         task_active = []
         task_waiting = []
-        for download in downloads:
-            if download.is_active:
-                task_active.append(download)
-            elif download.is_waiting:
-                task_waiting.append(download)
-            elif download.is_complete:
+        for task in tasks:
+            if task.is_active:
+                task_active.append(task)
+            elif task.is_waiting:
+                task_waiting.append(task)
+            elif task.is_complete:
                 continue
-            self.logger.info(
-                f"{download.gid:<17} "
-                f"{download.status:<9} "
-                f"{download.progress_string():>8} "
-                f"{download.download_speed_string():>12} "
-                f"{download.upload_speed_string():>12} "
-                f"{download.eta_string():>8}  "
-                f"{download.name}"
-            )
+            self.logger.info(task_briefing(task))
         self.logger.info(f'Task Active: {len(task_active)}, Waiting: {len(task_waiting)}')
         return task_active, task_waiting
 
@@ -150,8 +152,9 @@ class Aria2QueueManager:
                 self.logger.info(f'{idx}: swap out ({swap_count}/{task_count}) task {task.gid} "{task.name}"')
 
                 if not self.change_task_status(task, 'pause', condition=lambda d: d.live.is_paused, hint='paused'):
-                    self.logger.warning(f'Program is exiting. And the task( {task.gid} ) is switching to the pause status, '
-                                    f'which may cause the status of the task to not resume normally')
+                    self.logger.warning(f'Program is exiting. '
+                                        f'And the task( {task.gid} ) is switching to the pause status, '
+                                        f'which may cause the status of the task to not resume normally')
                     break
                 self.logger.debug(f'task( {task.gid} ) move to bottom')
                 task.move_to_bottom()
