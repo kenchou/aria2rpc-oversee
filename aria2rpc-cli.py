@@ -10,7 +10,7 @@ from pathlib import Path
 from fnmatch import fnmatch
 from torrent_parser import TorrentFileParser, InvalidTorrentDataException
 
-from aria2rpc import load_aria2_config, guess_path, \
+from aria2rpc import load_aria2_config, guess_path, task_briefing, \
     LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_TORRENT_EXCLUDE_LIST_FILE
 
 
@@ -147,9 +147,8 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
                 options['dir'] = str(Path(options.get('dir', '')) / '.tmp')
             # aria2.addUri([secret, ]uris[, options[, position]])
             # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addUri
-            response = aria2.add_uris([uri], options)
-            click.echo(response)
-            pass
+            task = aria2.add_uris([uri], options)
+            click.echo(task_briefing(task))
         elif is_torrent_file(uri):
             options['dir'] = str(Path(options.get('dir', '')) / '.tmp')
             try:
@@ -163,8 +162,8 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
                     f.seek(0)  # rewind the file
                 # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
                 # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
-                response = aria2.add_torrent(uri, [], options)
-                click.echo(response)
+                task = aria2.add_torrent(uri, [], options)
+                click.echo(task_briefing(task))
             except InvalidTorrentDataException as e:
                 click.secho(f'skip torrent file: "{uri}", reason: {e}', err=True, fg='yellow')
                 continue
@@ -216,12 +215,7 @@ def info(ctx, gid):
         print(f"+ {task.name}")
         print(f"  - {task.error_code=}, {task.error_message}")
         print(f"  - {task.dir}")
-        print(f"  - {task.gid:<17} "
-              f"{task.status:<9} "
-              f"{task.progress_string():>8} "
-              f"{task.download_speed_string():>12} "
-              f"{task.upload_speed_string():>12} "
-              f"{task.eta_string():>8}")
+        print(f"  - {task_briefing(task)}")
 
 
 @cli.command()
