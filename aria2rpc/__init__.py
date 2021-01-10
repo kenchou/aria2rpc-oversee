@@ -129,11 +129,11 @@ class Aria2QueueManager:
         else:
             return False
 
-    def update(self, task_list, task_count):
+    def update(self, task_list, task_max_count):
         """
         Strategy of task swap: download size
         :param task_list: [aria2p.downloads.Download]
-        :param task_count: int
+        :param task_max_count: int
         :return:
         """
         task: aria2p.downloads.Download
@@ -149,7 +149,7 @@ class Aria2QueueManager:
             # self.logger.debug(f'* {gid}: {increment}')
             if not increment:
                 swap_count += 1
-                self.logger.info(f'{idx}: swap out ({swap_count}/{task_count}) task {task.gid} "{task.name}"')
+                self.logger.info(f'{idx}: swap out ({swap_count}/{task_max_count}) task {task.gid} "{task.name}"')
 
                 if not self.change_task_status(task, 'pause', condition=lambda d: d.live.is_paused, hint='paused'):
                     self.logger.warning(f'Program is exiting. '
@@ -162,7 +162,7 @@ class Aria2QueueManager:
                 if not self.change_task_status(task, 'resume',
                                                condition=lambda d: not d.live.is_paused, hint='not paused'):
                     break
-                if swap_count >= task_count:
+                if swap_count >= task_max_count:
                     break
         if swap_count:
             self.logger.info(f'Swap {swap_count} tasks. Good luck!')
@@ -172,6 +172,6 @@ class Aria2QueueManager:
     def run(self):
         task_active, task_waiting = self.get_data()
         if task_waiting:
-            self.update(task_active, len(task_waiting))
+            self.update(task_active, min(len(task_active), len(task_waiting)))
         else:
             self.logger.info('No waiting tasks')
