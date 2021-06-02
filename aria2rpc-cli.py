@@ -144,6 +144,7 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
         # default search path
         guess_paths = [
             Path.home(),
+            Path.home() / '.aria2',
             Path(__file__).resolve().parent,  # ${BIN_PATH}
             Path(__file__).resolve().parent / '.aria2',
         ]
