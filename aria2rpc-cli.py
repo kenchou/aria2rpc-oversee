@@ -5,10 +5,12 @@ import click
 import click_log
 import logging
 import re
+import yaml
 
 from pathlib import Path
 from fnmatch import fnmatch
 from torrent_parser import TorrentFileParser, InvalidTorrentDataException
+from typing import Pattern
 
 from aria2rpc import load_aria2_config, guess_path, task_briefing, \
     LOG_LEVELS, DEFAULT_CONFIG_PATH, DEFAULT_TORRENT_EXCLUDE_LIST_FILE
@@ -16,6 +18,8 @@ from aria2rpc import load_aria2_config, guess_path, task_briefing, \
 
 PATTERN_SUPPORTED_URI = re.compile('(http(s)?|ftp(s)|sftp)://|magnet:')
 PATTERN_MAGNET_URI = re.compile('magnet:')
+
+exclude_patterns = []
 
 
 def is_supported_uri(uri):
@@ -43,28 +47,36 @@ def torrent_filter_file(torrent_info, excludes):
         file_path = Path().joinpath(*file_info['path'])
         file_length = file_info["length"]
         _lower_file_path = str(file_path).lower()  # for fnmatch case-insensitive
-        for p in excludes:
-            exclude_pattern = str(Path('*') / p) if include_path else p
-            if fnmatch(_lower_file_path, exclude_pattern.lower()):
-                logging.debug(f'{torrent_info["name"]}, match: {exclude_pattern}, '
-                              f'skip file: "{file_path}", len: {file_length}')
-                break
-        else:
-            logging.info(f'{torrent_info["name"]}, selected {idx}, file: "{file_path}", len: {file_length}')
+        matched, matched_pattern = match_remove_pattern(_lower_file_path)
+        logging.debug(f'{torrent_info["name"]}, match: {matched_pattern}, '
+                      f'{"skip" if matched else "select"} file: "{file_path}", len: {file_length}')
+        if not matched:
             selected.append(str(idx))
     return selected
 
 
 def build_exclude_list(filename):
-    exclude_patterns = []
-    if filename:
-        with open(filename) as f:
-            for line in f:
-                line = line.strip()
-                if not line or '#' == line[1]:  # skip empty lines or comment
-                    continue
-                exclude_patterns.append(line)
+    if not filename:
+        return exclude_patterns
+    with open(filename, encoding="utf8") as f:
+        config = yaml.safe_load(f)
+    for line in config['remove'].splitlines():
+        exclude_patterns.append(re.compile(line[1:], flags=re.IGNORECASE) if line.startswith('/') else line)
     return exclude_patterns
+
+
+def match_remove_pattern(filename):
+    for p in exclude_patterns:
+        if isinstance(p, Pattern):
+            matched = p.search(str(filename))
+            pat = p.pattern
+        else:
+            matched = fnmatch(filename, p)
+            pat = p
+        if matched:
+            return matched, pat
+    else:
+        return False, None
 
 
 @click.group()
@@ -108,8 +120,9 @@ def cli(ctx, config_file, host, port, token, verbose):
 
 
 @cli.command()
-@click.option('-d', '--download-dir', type=click.Path(exists=False), help="The directory to store the downloaded file.")
-@click.option('-x', '--exclude-file', type=click.Path(exists=False), default='clean.lst',
+@click.option('-d', '--download-dir', type=click.Path(exists=False),
+              help="The directory to store the downloaded file.")
+@click.option('-x', '--exclude-file', type=click.Path(exists=False),
               help="path to file of exclude list.", show_default=True)
 @click.option('--pause', 'set_pause', is_flag=True, help='Pause download after added.')
 @click.argument('torrent-files-or-uris', nargs=-1, required=True)
@@ -119,19 +132,31 @@ def add(ctx, download_dir, exclude_file, set_pause, torrent_files_or_uris):
 
     Support: *.torrent, magnet://, http://, https://, ftp://, ftps://, sftp://
     """
-    guess_paths = ctx.obj['guess_paths']
     aria2 = ctx.obj['aria2']
     logger = ctx.obj['logger']
 
     logger.info(f'* download-dir: {download_dir}')
-    logger.info(f'* exclude: {exclude_file}')
     logger.info(f'* pause: {str(set_pause).lower()}')
     logger.info(f'* files: {torrent_files_or_uris}')
 
-    exclude_file_path = guess_path(exclude_file, guess_paths) or guess_path(DEFAULT_TORRENT_EXCLUDE_LIST_FILE,
-                                                                            guess_paths)
+    # guess the location of exclude_file
+    if not exclude_file:
+        # default search path
+        guess_paths = [
+            Path.home(),
+            Path(__file__).resolve().parent,  # ${BIN_PATH}
+            Path(__file__).resolve().parent / '.aria2',
+        ]
+        # search target dir and parents first
+        if download_dir:
+            download_dir = Path(download_dir)
+            guess_paths = [download_dir] + list(download_dir.absolute().parents) + guess_paths
+        exclude_file = guess_path(DEFAULT_TORRENT_EXCLUDE_LIST_FILE, guess_paths)
+
+    logger.info(f'* exclude-file: {exclude_file}')
+
     # exclude list
-    exclude_patterns = build_exclude_list(exclude_file_path)
+    build_exclude_list(exclude_file)
 
     for uri in torrent_files_or_uris:
         logger.info(f'Add task {uri}')

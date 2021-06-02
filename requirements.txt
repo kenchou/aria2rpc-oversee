@@ -21,3 +21,4 @@ click_log == 0.3.2
 torrent_parser == 0.3.0
 
 requests~=2.25.0
+PyYAML~=5.4.1
