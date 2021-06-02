@@ -7,7 +7,7 @@ from pathlib import Path
 
 DEFAULT_CONFIG_PATH = '.aria2'
 DEFAULT_ARIA2_CONFIG = 'aria2rpc.json'
-DEFAULT_TORRENT_EXCLUDE_LIST_FILE = 'torrent_clean.lst'
+DEFAULT_TORRENT_EXCLUDE_LIST_FILE = '.cleanup-patterns.yml'
 DEFAULT_ARIA2_HOST = 'http://localhost'
 DEFAULT_ARIA2_PORT = 6800
 DEFAULT_ARIA2_JSONRPC = f'{DEFAULT_ARIA2_HOST}:{DEFAULT_ARIA2_PORT}/jsonrpc'
