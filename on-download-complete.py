@@ -47,6 +47,7 @@ def on_download_complete(api, gid):
         return
     # move files from tmp dir to another
     if '.tmp' == task.dir.name:
+        subprocess.call(["chmod", "-R", "g+w", Path(task.dir)])
         destination = Path(task.dir.parent)
         logger.info(f'Complete {task.gid}: move "{task.name}" from {task.dir} to {destination}')
         if task.move_files(destination):
