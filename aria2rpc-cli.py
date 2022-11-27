@@ -193,7 +193,10 @@ def add(ctx, download_dir, exclude_file, set_pause, dry_run, torrent_files_or_ur
 
     for uri in torrent_files_or_uris:
         logger.info(f"Add task {uri}")
-        options = {}  # init option
+        # init option
+        options = {
+            "continue": "true",
+        }
         if download_dir:
             options["dir"] = str(Path(download_dir))
         if set_pause:
