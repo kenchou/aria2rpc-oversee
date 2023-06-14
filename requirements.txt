@@ -22,7 +22,7 @@ click == 8.0.3
 click_log == 0.3.2
 
 # aria2rpc-oversee/aria2rpc-oversee.py: 7
-requests == 2.26.0
+requests == 2.31.0
 
 # aria2rpc-oversee/aria2rpc-cli.py: 12
 # aria2rpc-oversee/show-torrent-info.py: 7
