@@ -113,7 +113,9 @@ def cli(ctx, config_file, host, port, token, verbose):
     """Aria2 RPC Client"""
     global FEATURE_DEBUG
     FEATURE_DEBUG = verbose >= 3
-    logging.basicConfig(level=LOG_LEVELS.get(min(verbose, len(LOG_LEVELS) - 1), logging.INFO))
+    logging.basicConfig(
+        level=LOG_LEVELS.get(min(verbose, len(LOG_LEVELS) - 1), logging.INFO)
+    )
     # init logger
     logger = logging.getLogger(__name__)
     click_log.basic_config(logger)
@@ -143,6 +145,11 @@ def cli(ctx, config_file, host, port, token, verbose):
 
 @cli.command()
 @click.option(
+    "--allow-overwrite",
+    default=False,
+    help="Restart download from scratch if the corresponding control file doesn't exist.",
+)
+@click.option(
     "-d",
     "--download-dir",
     type=click.Path(exists=False),
@@ -156,10 +163,20 @@ def cli(ctx, config_file, host, port, token, verbose):
     show_default=True,
 )
 @click.option("--pause", "set_pause", is_flag=True, help="Pause download after added.")
-@click.option("--dry-run", is_flag=True, help="Test add function. Not submit to aria2-rpc")
+@click.option(
+    "--dry-run", is_flag=True, help="Test add function. Not submit to aria2-rpc"
+)
 @click.argument("torrent-files-or-uris", nargs=-1, required=True)
 @click.pass_context
-def add(ctx, download_dir, exclude_file, set_pause, dry_run, torrent_files_or_uris):
+def add(
+    ctx,
+    allow_overwrite,
+    download_dir,
+    exclude_file,
+    set_pause,
+    dry_run,
+    torrent_files_or_uris,
+):
     """Add tasks.
 
     Support: *.torrent, magnet://, http://, https://, ftp://, ftps://, sftp://
@@ -170,6 +187,7 @@ def add(ctx, download_dir, exclude_file, set_pause, dry_run, torrent_files_or_ur
     logger.info(f"* download-dir: {download_dir}")
     logger.info(f"* pause: {str(set_pause).lower()}")
     logger.info(f"* files: {torrent_files_or_uris}")
+    logger.info(f"* allow-overwrite: {allow_overwrite}")
 
     # guess the location of exclude_file
     if not exclude_file:
@@ -183,7 +201,9 @@ def add(ctx, download_dir, exclude_file, set_pause, dry_run, torrent_files_or_ur
         # search target dir and parents first
         if download_dir:
             download_dir = Path(download_dir)
-            guess_paths = [download_dir] + list(download_dir.absolute().parents) + guess_paths
+            guess_paths = (
+                [download_dir] + list(download_dir.absolute().parents) + guess_paths
+            )
         exclude_file = guess_path(DEFAULT_TORRENT_EXCLUDE_LIST_FILE, guess_paths)
 
     logger.info(f"* exclude-file: {exclude_file}")
@@ -201,6 +221,8 @@ def add(ctx, download_dir, exclude_file, set_pause, dry_run, torrent_files_or_ur
             options["dir"] = str(Path(download_dir))
         if set_pause:
             options["pause"] = str(set_pause).lower()
+        if allow_overwrite:
+            options["allow-overwrite"] = str(allow_overwrite).lower()
 
         # TODO: check task in queue
         if is_supported_uri(uri):
@@ -228,7 +250,9 @@ def add(ctx, download_dir, exclude_file, set_pause, dry_run, torrent_files_or_ur
                     task = aria2.add_torrent(uri, [], options)
                     click.echo(f"Create task {task.gid}")
             except InvalidTorrentDataException as e:
-                click.secho(f'skip torrent file: "{uri}", reason: {e}', err=True, fg="yellow")
+                click.secho(
+                    f'skip torrent file: "{uri}", reason: {e}', err=True, fg="yellow"
+                )
                 continue
         elif is_aria2_file(uri):
             # TODO: parse .aria2 file and add magnet URI
@@ -247,13 +271,28 @@ def add(ctx, download_dir, exclude_file, set_pause, dry_run, torrent_files_or_ur
     help="display all status. same as -t -w -s",
 )
 @click.option(
-    "-t", "--active", "show_active", is_flag=True, default=False, help="display active queue."
+    "-t",
+    "--active",
+    "show_active",
+    is_flag=True,
+    default=False,
+    help="display active queue.",
 )
 @click.option(
-    "-w", "--waiting", "show_waiting", is_flag=True, default=False, help="display waiting queue."
+    "-w",
+    "--waiting",
+    "show_waiting",
+    is_flag=True,
+    default=False,
+    help="display waiting queue.",
 )
 @click.option(
-    "-p", "--paused", "show_paused", is_flag=True, default=False, help="display paused queue."
+    "-p",
+    "--paused",
+    "show_paused",
+    is_flag=True,
+    default=False,
+    help="display paused queue.",
 )
 @click.option(
     "-s",
@@ -332,7 +371,9 @@ def pause(ctx, gids):
         else:
             print(f"{r=}")
     for download in downloads:
-        print(f"{download.gid=}, {download.status=}, {download.live.status=}, {download.status=}")
+        print(
+            f"{download.gid=}, {download.status=}, {download.live.status=}, {download.status=}"
+        )
 
 
 @cli.command()
@@ -358,7 +399,9 @@ def resume(ctx, gids):
         else:
             print(f"{r=}")
     for download in downloads:
-        print(f"{download.gid=}, {download.status=}, {download.live.status=}, {download.status=}")
+        print(
+            f"{download.gid=}, {download.status=}, {download.live.status=}, {download.status=}"
+        )
 
 
 @cli.command()
