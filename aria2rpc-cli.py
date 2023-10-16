@@ -146,7 +146,7 @@ def cli(ctx, config_file, host, port, token, verbose):
 @cli.command()
 @click.option(
     "--allow-overwrite",
-    default=False,
+    is_flag=True,
     help="Restart download from scratch if the corresponding control file doesn't exist.",
 )
 @click.option(
