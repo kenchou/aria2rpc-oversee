@@ -28,6 +28,16 @@ PATTERN_MAGNET_URI = re.compile("magnet:")
 FEATURE_DEBUG = False
 
 
+def convert_bytes(num):
+    """
+    这个函数将字节转换为 KB，MB 或 GB
+    """
+    for unit in ["bytes", "KB", "MB", "GB", "TB"]:
+        if num < 1024.0:
+            return "%3.1f %s" % (num, unit)
+        num /= 1024.0
+
+
 def is_supported_uri(uri):
     return PATTERN_SUPPORTED_URI.match(uri)
 
@@ -267,7 +277,7 @@ def add(
             click.secho(f'Not currently supported file "{uri}"', err=True, fg="red")
         else:
             click.secho(f'Unknown file "{uri}"', err=True, fg="red")
-    click.secho(f"(torrent) {estimated_file_size=}")
+    click.secho(f"Estimated file size (torrent): {convert_bytes(estimated_file_size)}")
 
 
 @cli.command(name="list")
