@@ -46,7 +46,8 @@ def is_aria2_file(filename):
 
 def torrent_filter_file(torrent_info, excludes):
     if "files" not in torrent_info:  # filter if there is multi-files torrent
-        return False, 0
+        file_length = torrent_info.get("info", {}).get("length", 0)
+        return False, file_length
     selected = []
     selected_file_size = 0
     for idx, file_info in enumerate(torrent_info["files"], 1):
@@ -249,7 +250,7 @@ def add(
                     )
                     if selected_file_idx:
                         options["select-file"] = ",".join(selected_file_idx)
-                        estimated_file_size += selected_file_size
+                    estimated_file_size += selected_file_size
                     f.seek(0)  # rewind the file
                 # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
                 # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
