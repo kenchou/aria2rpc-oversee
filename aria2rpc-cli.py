@@ -237,6 +237,7 @@ def add(
                 task = aria2.add_uris([uri], options)
                 click.echo(f"Create task {task.gid}")
         elif is_torrent_file(uri):
+            click.secho(f"add {uri}", fg="cyan")
             options["dir"] = str(Path(options.get("dir", "")) / ".tmp")
             try:
                 # setup option.select-file
