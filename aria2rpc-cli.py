@@ -46,7 +46,7 @@ def is_aria2_file(filename):
 
 def torrent_filter_file(torrent_info, excludes):
     if "files" not in torrent_info:  # filter if there is multi-files torrent
-        return False
+        return False, 0
     selected = []
     selected_file_size = 0
     for idx, file_info in enumerate(torrent_info["files"], 1):
