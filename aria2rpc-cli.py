@@ -48,6 +48,7 @@ def torrent_filter_file(torrent_info, excludes):
     if "files" not in torrent_info:  # filter if there is multi-files torrent
         return False
     selected = []
+    selected_file_size = 0
     for idx, file_info in enumerate(torrent_info["files"], 1):
         file_path = Path().joinpath(*file_info["path"])
         file_length = file_info["length"]
@@ -60,13 +61,14 @@ def torrent_filter_file(torrent_info, excludes):
             file = click.style(file_path, fg="green")
             click.echo(f'{symbol} "{file}" ({file_length=})')
             selected.append(str(idx))
+            selected_file_size += file_length
         else:  # skip
             # logging.info(f'- "{file_path}", {file_length=}, {matched_pattern}')
             symbol = click.style("-", fg="red")
             file = click.style(file_path, fg="red")
             debug_info = f" <= {matched_pattern}" if FEATURE_DEBUG else ""
             click.echo(f'{symbol} "{file}" ({file_length=}){debug_info}')
-    return selected
+    return selected, selected_file_size
 
 
 def build_exclude_list(filename):
@@ -211,6 +213,7 @@ def add(
     # exclude list
     exclude_patterns = build_exclude_list(exclude_file)
 
+    estimated_file_size = 0
     for uri in torrent_files_or_uris:
         logger.info(f"Add task {uri}")
         # init option
@@ -240,9 +243,12 @@ def add(
                 with open(uri, "rb") as f:
                     # parse torrent file
                     torrent = TorrentFileParser(f).parse()
-                    selected = torrent_filter_file(torrent["info"], exclude_patterns)
-                    if selected:
-                        options["select-file"] = ",".join(selected)
+                    selected_file_idx, selected_file_size = torrent_filter_file(
+                        torrent["info"], exclude_patterns
+                    )
+                    if selected_file_idx:
+                        options["select-file"] = ",".join(selected_file_idx)
+                        estimated_file_size += selected_file_size
                     f.seek(0)  # rewind the file
                 # aria2.addTorrent([secret, ]torrent[, uris[, options[, position]]])
                 # @see https://aria2.github.io/manual/en/html/aria2c.html#aria2.addTorrent
@@ -259,6 +265,7 @@ def add(
             click.secho(f'Not currently supported file "{uri}"', err=True, fg="red")
         else:
             click.secho(f'Unknown file "{uri}"', err=True, fg="red")
+    click.secho(f"(torrent) {estimated_file_size=}")
 
 
 @cli.command(name="list")
