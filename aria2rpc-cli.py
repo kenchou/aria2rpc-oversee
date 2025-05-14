@@ -70,7 +70,7 @@ def torrent_filter_file(torrent_info, excludes):
         # 跳过超长的文件名（linux <= 255)
         if filename_max_len > 255:
             symbol = click.style("⚠️", fg="red")
-            file = click.style(file_path, fg="red")
+            file = click.style(file_path, fg="yellow")
             debug_info = f" {filename_max_len} >= 255" if FEATURE_DEBUG else ""
             click.echo(f'{symbol} "{file}" ({file_length=}){debug_info}')
             continue
@@ -88,7 +88,7 @@ def torrent_filter_file(torrent_info, excludes):
         else:  # skip
             # logging.info(f'- "{file_path}", {file_length=}, {matched_pattern}')
             symbol = click.style("-", fg="red")
-            file = click.style(file_path, fg="red")
+            file = click.style(file_path, fg="bright_black")
             debug_info = f" <= {matched_pattern}" if FEATURE_DEBUG else ""
             click.echo(f'{symbol} "{file}" ({file_length=}){debug_info}')
     return selected, selected_file_size
