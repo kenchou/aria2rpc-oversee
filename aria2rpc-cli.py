@@ -61,8 +61,20 @@ def torrent_filter_file(torrent_info, excludes):
     selected = []
     selected_file_size = 0
     for idx, file_info in enumerate(torrent_info["files"], 1):
-        file_path = Path().joinpath(*file_info["path"])
+        file_path_info = file_info["path"]
+        longest_path = max(file_path_info, key=len)
+        filename_max_len = len(longest_path)
+        file_path = Path().joinpath(*file_path_info)
         file_length = file_info["length"]
+
+        # 跳过超长的文件名（linux <= 255)
+        if filename_max_len > 255:
+            symbol = click.style("⚠️", fg="red")
+            file = click.style(file_path, fg="red")
+            debug_info = f" {filename_max_len} >= 255" if FEATURE_DEBUG else ""
+            click.echo(f'{symbol} "{file}" ({file_length=}){debug_info}')
+            continue
+
         _lower_file_path = str(file_path).lower()  # for fnmatch case-insensitive
         matched, matched_pattern = match_remove_pattern(_lower_file_path, excludes)
         # logging.debug(f'{torrent_info["name"]=}, {matched=}, {matched_pattern=}')
