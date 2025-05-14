@@ -57,27 +57,33 @@ def on_download_complete(api, gid):
         subprocess.call(["chmod", "-R", "g+w", Path(task.dir)])
         destination = Path(task.dir.parent)
         logger.info(
-            f'Complete {task.gid}: move "{task.name}" from {task.dir} to {destination}'
+            f'Task {task.gid} Complete: move "{task.name}" from {task.dir} to {destination}'
         )
-        if task.move_files(destination):
+        if move_or_merge(task, destination):
             control_file = task.control_file_path
             if control_file.exists():
+                logger.info(f"Remove control file: {control_file}")
                 control_file.unlink()
             # do not purge bt task
             # task.purge()
 
 
-def move_or_merge(task: aria2p.downloads.Download, destination: Path):
+def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
     all_success = True
     if destination.exists():  # 目标已存在，使用 rsync
+        logger.info(f"Sync {task.root_files_paths=} to {destination}")
         for path in task.root_files_paths:
             exit_code = subprocess.call(["rsync", "-a", path, destination])
+            logger.info(f"--> [{exit_code=}]: sync -a {path} {destination}")
             if exit_code != 0:
                 all_success = False
         if all_success:
             for path in task.root_files_paths:
+                logger.info(f"--> rm {path}")
                 path.unlink(missing_ok=True)
+        return all_success
     else:
+        logger.info(f"move {task.root_files_paths=} to {destination}")
         return task.move_files(destination)
 
 
