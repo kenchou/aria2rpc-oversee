@@ -355,9 +355,11 @@ def info(ctx, gid):
     aria2 = ctx.obj["aria2"]
     for gid in gid_list:
         task = aria2.get_download(gid)
-        print(f"+ {task.name}")
-        print(f"  - {task.error_code=}, {task.error_message}")
-        print(f"  - {task.dir}")
+        print(f"+ name={task.name}")
+        print(f"  - error_code={task.error_code=}")
+        print(f"  - error_message={task.error_message}")
+        print(f"  - dir={task.dir}")
+        print(f"  - root_files_paths={task.root_files_paths}")
         print(f"  - {task_briefing(task)}")
 
 
