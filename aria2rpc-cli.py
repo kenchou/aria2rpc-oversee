@@ -62,8 +62,8 @@ def torrent_filter_file(torrent_info, excludes):
     selected_file_size = 0
     for idx, file_info in enumerate(torrent_info["files"], 1):
         file_path_info = file_info["path"]
-        longest_path = max(file_path_info, key=len)
-        filename_max_len = len(longest_path)
+        longest_path = str(max(file_path_info, key=len))
+        filename_max_len = len(longest_path.encode("utf8"))
         file_path = Path().joinpath(*file_path_info)
         file_length = file_info["length"]
 
