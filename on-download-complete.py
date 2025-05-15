@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # ~/callbacks.py
+import shutil
 
 import aria2p
 import click
@@ -90,8 +91,12 @@ def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
             logger.debug(f"{stderr_output=}")
 
             if exit_code == 0:
-                logger.info(f"--> rm {path}")
-                path.unlink(missing_ok=True)
+                if path.is_dir():   # 删除目录树
+                    logger.info(f"--> rm -rf {path}")
+                    shutil.rmtree(path, ignore_errors=True)
+                else:   # 删除文件
+                    logger.info(f"--> rm {path}")
+                    path.unlink(missing_ok=True)
             else:
                 logger.info(f"--> rsync failed. exit code: {exit_code}")
                 all_success = False
