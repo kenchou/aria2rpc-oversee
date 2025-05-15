@@ -48,6 +48,13 @@ def on_download_complete(api, gid):
     task: aria2p.downloads.Download
     task = api.get_download(gid)
     print_task_info(task)
+
+    # 删除 .aria2 控制文件
+    control_file = task.control_file_path
+    if control_file.exists():
+        logger.info(f"Remove control file: {control_file}")
+        control_file.unlink()
+
     # purge magnet metadata task
     if task.is_metadata:
         logger.info(f'Purge Complete metadata {task.gid}: "{task.name}".')
@@ -61,16 +68,14 @@ def on_download_complete(api, gid):
             f'Task {task.gid} Complete: move "{task.name}" from {task.dir} to {destination}'
         )
         if move_or_merge(task, destination):
-            control_file = task.control_file_path
-            if control_file.exists():
-                logger.info(f"Remove control file: {control_file}")
-                control_file.unlink()
             # do not purge bt task
             # task.purge()
+            pass
 
 
 def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
     all_success = True
+    # TODO: 检查 task.root_files_paths 对应在 destination 上是否存在
     if destination.exists():  # 目标已存在，使用 rsync
         logger.info(f"Sync {task.root_files_paths=} to {destination}")
         for path in task.root_files_paths:
@@ -101,7 +106,7 @@ def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
                 logger.info(f"--> rsync failed. exit code: {exit_code}")
                 all_success = False
         return all_success
-    else:
+    else: # 目标不存在则直接移动（改名）
         logger.info(f"move {task.root_files_paths=} to {destination}")
         return task.move_files(destination)
 
