@@ -73,14 +73,28 @@ def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
     if destination.exists():  # 目标已存在，使用 rsync
         logger.info(f"Sync {task.root_files_paths=} to {destination}")
         for path in task.root_files_paths:
-            exit_code = subprocess.call(["rsync", "-a", path, destination])
-            logger.info(f"--> [{exit_code=}]: sync -a {path} {destination}")
-            if exit_code != 0:
-                all_success = False
-        if all_success:
-            for path in task.root_files_paths:
+            # rsync 同步，然后删除源文件（移动，但保留空目录）
+            result = subprocess.run(
+                ["/usr/bin/rsync", "-a", "--remove-source-files", "--progress", path, destination],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            exit_code = result.returncode
+            stdout_output = result.stdout
+            stderr_output = result.stderr
+
+            logger.debug(f"--> rsync -a {path} {destination}")
+            logger.debug(f"{exit_code=}")
+            logger.debug(f"{stdout_output=}")
+            logger.debug(f"{stderr_output=}")
+
+            if exit_code == 0:
                 logger.info(f"--> rm {path}")
                 path.unlink(missing_ok=True)
+            else:
+                logger.info(f"--> rsync failed. exit code: {exit_code}")
+                all_success = False
         return all_success
     else:
         logger.info(f"move {task.root_files_paths=} to {destination}")
