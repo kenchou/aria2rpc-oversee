@@ -61,8 +61,20 @@ def torrent_filter_file(torrent_info, excludes):
     selected = []
     selected_file_size = 0
     for idx, file_info in enumerate(torrent_info["files"], 1):
-        file_path = Path().joinpath(*file_info["path"])
+        file_path_info = file_info["path"]
+        longest_path = str(max(file_path_info, key=len))
+        filename_max_len = len(longest_path.encode("utf8"))
+        file_path = Path().joinpath(*file_path_info)
         file_length = file_info["length"]
+
+        # 跳过超长的文件名（linux <= 255)
+        if filename_max_len > 255:
+            symbol = click.style("⚠️", fg="red")
+            file = click.style(file_path, fg="yellow")
+            debug_info = f" {filename_max_len} >= 255" if FEATURE_DEBUG else ""
+            click.echo(f'{symbol} "{file}" ({file_length=}){debug_info}')
+            continue
+
         _lower_file_path = str(file_path).lower()  # for fnmatch case-insensitive
         matched, matched_pattern = match_remove_pattern(_lower_file_path, excludes)
         # logging.debug(f'{torrent_info["name"]=}, {matched=}, {matched_pattern=}')
@@ -76,7 +88,7 @@ def torrent_filter_file(torrent_info, excludes):
         else:  # skip
             # logging.info(f'- "{file_path}", {file_length=}, {matched_pattern}')
             symbol = click.style("-", fg="red")
-            file = click.style(file_path, fg="red")
+            file = click.style(file_path, fg="bright_black")
             debug_info = f" <= {matched_pattern}" if FEATURE_DEBUG else ""
             click.echo(f'{symbol} "{file}" ({file_length=}){debug_info}')
     return selected, selected_file_size
@@ -355,9 +367,11 @@ def info(ctx, gid):
     aria2 = ctx.obj["aria2"]
     for gid in gid_list:
         task = aria2.get_download(gid)
-        print(f"+ {task.name}")
-        print(f"  - {task.error_code=}, {task.error_message}")
-        print(f"  - {task.dir}")
+        print(f"+ name={task.name}")
+        print(f"  - error_code={task.error_code=}")
+        print(f"  - error_message={task.error_message}")
+        print(f"  - dir={task.dir}")
+        print(f"  - root_files_paths={task.root_files_paths}")
         print(f"  - {task_briefing(task)}")
 
 
