@@ -1,7 +1,7 @@
 Aria2 JSONRPC 任务调度器
 =======================
 
-  This is a download task scheduler designed for `Aria2` RPC mode. It periodically checks the download progress every few minutes. If a task remains stalled with no progress for an extended period, it will be moved to the end of the waiting queue to prevent blockages, thereby optimizing overall system resources to prioritize faster completion of downloads.
+  This is a download task scheduler designed for `Aria2` RPC mode. It periodically checks the download progress every few minutes. If a task remains stalled with no progress for an extended period, it will be moved to the end of the waiting queue to prevent blockages, thereby allowing more downloads to complete faster overall by deprioritizing stalled tasks.
 
   这是一个为 `Aria2` RPC 模式设计的下载任务调度程序。它每隔几分钟查询下载进度。如果某个任务长时间没有进展，会被调到等待队列的末尾，不要阻塞等待队列。这样总体上可以让更多的资源尽快下载完成。
 
