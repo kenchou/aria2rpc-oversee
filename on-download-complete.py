@@ -73,43 +73,64 @@ def on_download_complete(api, gid):
 def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
     all_success = True
     task_id = task.gid
-    if destination.exists():  # 目标已存在，使用 rsync
-        logger.info(f"[{task_id}] Sync {task.root_files_paths=} to {destination}")
-        for path in task.root_files_paths:
-            # rsync 同步，然后删除源文件（移动，但保留空目录）
-            result = subprocess.run(
-                ["/usr/bin/rsync", "-ahvP", "--remove-source-files", path, destination],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            exit_code = result.returncode
-            stdout_output = result.stdout
-            stderr_output = result.stderr
-
-            logger.debug(
-                f"[{task_id}] --> rsync -ahvP --remove-source-files {path} {destination}"
-            )
-            for line in stdout_output.splitlines():
-                logger.debug(f"[{task_id}] {line}")
-            for line in stderr_output.splitlines():
-                logger.debug(f"[{task_id}] {line}")
-            logger.debug(f"[{task_id}] {exit_code=}")
-
-            if exit_code == 0:
-                if path.is_dir():  # 删除目录树
-                    logger.info(f"[{task_id}] --> rm -rf {path}")
-                    shutil.rmtree(path, ignore_errors=True)
-                else:  # 删除文件
-                    logger.info(f"[{task_id}] --> rm {path}")
-                    path.unlink(missing_ok=True)
-            else:
-                logger.info(f"[{task_id}] --> rsync failed. exit code: {exit_code}")
-                all_success = False
-        return all_success
-    else:
-        logger.info(f"[{task_id}] move {task.root_files_paths=} to {destination}")
+    
+    # 检查是否有冲突（目标位置已存在同名文件/目录）
+    has_conflicts = False
+    for path in task.root_files_paths:
+        # 获取相对于下载目录的根级别名称
+        try:
+            relative_path = path.relative_to(task.dir)
+            root_name = relative_path.parts[0]  # 取第一部分作为根级别名称
+        except (ValueError, IndexError):
+            # 如果无法获取相对路径，直接使用文件名
+            root_name = path.name
+        
+        target_path = destination / root_name
+        if target_path.exists():
+            logger.info(f"[{task_id}] Conflict detected: {target_path} already exists")
+            has_conflicts = True
+            break
+    
+    # 如果没有冲突，直接使用 move_files（最高效）
+    if not has_conflicts:
+        logger.info(f"[{task_id}] No conflicts detected, using move_files to {destination}")
         return task.move_files(destination)
+    
+    # 有冲突时，使用 rsync 处理每个文件/目录
+    logger.info(f"[{task_id}] Conflicts detected, using rsync for merge")
+    for path in task.root_files_paths:
+        # rsync 同步，然后删除源文件（移动，但保留空目录）
+        result = subprocess.run(
+            ["/usr/bin/rsync", "-hav", "--partial", "--remove-source-files", path, destination],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        exit_code = result.returncode
+        stdout_output = result.stdout
+        stderr_output = result.stderr
+
+        logger.debug(
+            f"[{task_id}] --> rsync -hav --partial --remove-source-files {path} {destination}"
+        )
+        for line in stdout_output.splitlines():
+            logger.debug(f"[{task_id}] {line}")
+        for line in stderr_output.splitlines():
+            logger.debug(f"[{task_id}] {line}")
+        logger.debug(f"[{task_id}] {exit_code=}")
+
+        if exit_code == 0:
+            if path.is_dir():  # 删除目录树
+                logger.info(f"[{task_id}] --> rm -rf {path}")
+                shutil.rmtree(path, ignore_errors=True)
+            else:  # 删除文件
+                logger.info(f"[{task_id}] --> rm {path}")
+                path.unlink(missing_ok=True)
+        else:
+            logger.info(f"[{task_id}] --> rsync failed. exit code: {exit_code}")
+            all_success = False
+    
+    return all_success
 
 
 @click.command()
