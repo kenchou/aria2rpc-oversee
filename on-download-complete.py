@@ -120,16 +120,17 @@ def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
 
     # 有冲突时，使用 rsync 处理每个文件/目录
     logger.info(f"[{task_id}] Conflicts detected, using rsync for merge")
+
     for path in task.root_files_paths:
-        # rsync 同步，然后删除源文件（移动，但保留空目录）
+        # 先用 rsync 复制（不自动删除源文件，安全起见）
+        # 只在确认 rsync 完全成功后才手动删除源文件
         result = subprocess.run(
             [
                 "/usr/bin/rsync",
                 "-hav",
                 "--partial",
-                "--remove-source-files",
-                path,
-                destination,
+                str(path),
+                str(destination),
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -140,23 +141,45 @@ def move_or_merge(task: aria2p.downloads.Download, destination: Path) -> bool:
         stderr_output = result.stderr
 
         logger.debug(
-            f"[{task_id}] --> rsync -hav --partial --remove-source-files {path} {destination}"
+            f"[{task_id}] --> rsync -hav --partial {path} {destination}"
         )
         for line in stdout_output.splitlines():
             logger.debug(f"[{task_id}] {line}")
         for line in stderr_output.splitlines():
             logger.debug(f"[{task_id}] {line}")
         logger.debug(f"[{task_id}] {exit_code=}")
+        logger.debug(f"[{task_id}] stderr length={len(stderr_output)}")
 
-        if exit_code == 0:
-            if path.is_dir():  # 删除目录树
-                logger.info(f"[{task_id}] --> rm -rf {path}")
-                shutil.rmtree(path, ignore_errors=True)
-            else:  # 删除文件
-                logger.info(f"[{task_id}] --> rm {path}")
-                path.unlink(missing_ok=True)
+        # 增强成功判断：不仅要 exit_code == 0，还要 stderr 中没有 rsync 错误
+        # rsync 的错误消息通常以 "rsync:" 或 "rsync error" 开头，出现在 stderr
+        rsync_failed = (
+            exit_code != 0
+            or "rsync error" in stderr_output
+        )
+
+        if not rsync_failed:
+            # rsync 确认成功，安全删除源文件
+            try:
+                if path.is_dir():
+                    logger.info(f"[{task_id}] --> rm -rf {path}")
+                    shutil.rmtree(path)
+                else:
+                    logger.info(f"[{task_id}] --> rm {path}")
+                    path.unlink(missing_ok=True)
+            except OSError as e:
+                logger.error(
+                    f"[{task_id}] Failed to remove source {path}: {e}"
+                )
+                all_success = False
         else:
-            logger.info(f"[{task_id}] --> rsync failed. exit code: {exit_code}")
+            logger.error(
+                f"[{task_id}] --> rsync failed (exit_code={exit_code}). "
+                f"Source preserved at {path}"
+            )
+            if stderr_output and "rsync error" in stderr_output:
+                for line in stderr_output.splitlines():
+                    if "rsync error" in line:
+                        logger.error(f"[{task_id}] {line}")
             all_success = False
 
     return all_success
